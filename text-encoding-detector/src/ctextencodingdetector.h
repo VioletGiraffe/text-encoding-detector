@@ -26,6 +26,14 @@ public:
 		float match; // 0.0 to 1.0
 	};
 
+	static std::pair<QString/*text*/, QString /*encoding*/>
+	decode(const QString& textFilePath, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages = std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> >(), MatchFunction customMatchFunction = MatchFunction());
+	static std::pair<QString/*text*/, QString /*encoding*/>
+	decode(const QByteArray& textData, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages = std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> >(), MatchFunction customMatchFunction = MatchFunction());
+	static std::pair<QString/*text*/, QString /*encoding*/>
+	decode(QIODevice& textDevice, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages = std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> >(), MatchFunction customMatchFunction = MatchFunction());
+
+
 	// The results are sorted by match from high to low
 	static std::vector<EncodingDetectionResult>
 	detect(const QString& textFilePath, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages = std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> >(), MatchFunction customMatchFunction = MatchFunction());
