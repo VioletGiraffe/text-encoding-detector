@@ -31,9 +31,13 @@ static const auto defaultMatchFunction =
 			return matchingNgramsCount > 0 ? match / matchingNgramsCount : 0.0f;
 });
 
+#include <QTime>
+
 template <typename T>
 std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& parameter, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base>> tablesForLanguages, CTextEncodingDetector::MatchFunction matchFunction)
 {
+	QTime start;
+	start.start();
 	auto availableCodecs = QTextCodec::availableCodecs();
 	std::vector<CTextEncodingDetector::EncodingDetectionResult> match;
 
@@ -58,7 +62,7 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& parameter,
 	for (auto& codec: differentCodecs)
 	{
 		CTextParser parser;
-		if (!parser.parse(parameter, QString(codec->name())))
+		if (!parser.parse(parameter, QString(codec->name()), 3000))
 			continue;
 
 		for (auto& table: tablesForLanguages)
@@ -66,6 +70,7 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& parameter,
 	}
 
 	std::sort(match.begin(), match.end(), [](const CTextEncodingDetector::EncodingDetectionResult& l, const CTextEncodingDetector::EncodingDetectionResult& r){return l.match > r.match;});
+	qDebug() << __FUNCTION__ << "Time taken:" << start.elapsed() << "ms";
 	return match;
 }
 
@@ -75,7 +80,8 @@ std::pair<QString, QString> CTextEncodingDetector::decode(const QString & textFi
 	auto detectionResult = detect(textFilePath, tablesForLanguages, customMatchFunction);
 	qDebug() << "Encoding detection result for" << textFilePath;
 	for (auto& match: detectionResult)
-		qDebug() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
+		if (match.match > 0.05f)
+			qDebug() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
 
 	if (!detectionResult.empty())
 	{
@@ -97,7 +103,8 @@ std::pair<QString, QString> CTextEncodingDetector::decode(const QByteArray & tex
 	auto detectionResult = detect(textData, tablesForLanguages, customMatchFunction);
 	qDebug() << "Encoding detection result:";
 	for (auto& match: detectionResult)
-		qDebug() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
+		if (match.match > 0.05f)
+			qDebug() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
 
 	if (!detectionResult.empty())
 	{
@@ -115,7 +122,8 @@ std::pair<QString, QString> CTextEncodingDetector::decode(QIODevice & textDevice
 	auto detectionResult = detect(textDevice, tablesForLanguages, customMatchFunction);
 	qDebug() << "Encoding detection result:";
 	for (auto& match: detectionResult)
-		qDebug() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
+		if (match.match > 0.05f)
+			qDebug() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
 
 	if (!detectionResult.empty())
 	{

@@ -4,28 +4,29 @@
 #include <QFile>
 #include <QBuffer>
 
+#include <random>
 #include <assert.h>
 
 CTextParser::CTextParser()
 {
 }
 
-bool CTextParser::parse(const QString & textFilePath, const QString& codecName)
+bool CTextParser::parse(const QString & textFilePath, const QString& codecName, size_t sampleSize)
 {
 	QFile file(textFilePath);
 	if (!file.exists())
 		return false;
 
-	return parse(file, codecName);
+	return parse(file, codecName, sampleSize);
 }
 
-bool CTextParser::parse(const QByteArray & textData, const QString& codecName)
+bool CTextParser::parse(const QByteArray & textData, const QString& codecName, size_t sampleSize)
 {
 	QBuffer buffer(const_cast<QByteArray*>(&textData));
-	return parse(buffer, codecName);
+	return parse(buffer, codecName, sampleSize);
 }
 
-bool CTextParser::parse(QIODevice & textDevice, const QString& codecName)
+bool CTextParser::parse(QIODevice & textDevice, const QString& codecName, size_t sampleSize)
 {
 	assert(!codecName.isEmpty());
 	if (!textDevice.isOpen() && !textDevice.open(QIODevice::ReadOnly))
@@ -58,9 +59,23 @@ bool CTextParser::parse(QIODevice & textDevice, const QString& codecName)
 	++_parsingResult.trigramOccurrenceTable[currentTrigram];
 	++_parsingResult.totalTrigrammsCount;
 
-	while (!stream.atEnd())
+	if (sampleSize > 0 && sampleSize < (size_t)textDevice.size() - 3)
+	{
+		std::mt19937 generator;
+		generator.seed(textDevice.size());
+		std::uniform_int_distribution<qint64> distribution(3, textDevice.size() - sampleSize - 3);
+		const auto randomBlockOffset = distribution(generator);
+		const bool succ = stream.seek(randomBlockOffset);
+		assert(succ);
+	}
+	else
+		sampleSize = 0;
+
+	size_t symbolCounter = 0;
+	while ((sampleSize == 0 && !stream.atEnd()) || (sampleSize > 0 && symbolCounter < sampleSize))
 	{
 		stream >> ch;
+		++symbolCounter;
 
 		if (ch.isLetter())
 		{
