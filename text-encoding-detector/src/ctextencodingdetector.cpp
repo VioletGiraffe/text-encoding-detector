@@ -11,7 +11,7 @@
 #include <set>
 #include <assert.h>
 
-static const auto defaultMatchFunction =
+static const CTextEncodingDetector::MatchFunction defaultMatchFunction =
 		CTextEncodingDetector::MatchFunction([](const CTextParser::OccurrenceTable& arg1, const CTextParser::OccurrenceTable& arg2) -> float {
 			if (arg2.trigramOccurrenceTable.size() < arg1.trigramOccurrenceTable.size())
 				return defaultMatchFunction(arg2, arg1); // Performance optimization - outer loop must be over the smaller of the 2 containers for better performance
