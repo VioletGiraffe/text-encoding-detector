@@ -1,4 +1,4 @@
-	DESTDIR  = ../../bin
+DESTDIR  = ../../bin
 TARGET = text_encoding_detector
 TEMPLATE = lib
 CONFIG += staticlib
@@ -9,6 +9,8 @@ OBJECTS_DIR = ../../build/text_encoding_detector
 MOC_DIR     = ../../build/text_encoding_detector
 UI_DIR      = ../../build/text_encoding_detector
 RCC_DIR     = ../../build/text_encoding_detector
+
+INCLUDEPATH += ../../qtutils
 
 win*{
 	QMAKE_CXXFLAGS += /MP

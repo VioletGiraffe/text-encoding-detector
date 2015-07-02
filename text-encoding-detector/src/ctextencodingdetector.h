@@ -3,8 +3,6 @@
 
 #include "ctextparser.h"
 
-#include <QString>
-
 #include <utility>
 #include <functional>
 #include <vector>

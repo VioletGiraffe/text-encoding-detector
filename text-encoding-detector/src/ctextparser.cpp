@@ -1,8 +1,10 @@
 #include "ctextparser.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QTextStream>
 #include <QFile>
 #include <QBuffer>
+RESTORE_COMPILER_WARNINGS
 
 #include <random>
 #include <assert.h>
@@ -62,7 +64,7 @@ bool CTextParser::parse(QIODevice & textDevice, const QString& codecName, size_t
 	if (sampleSize > 0 && sampleSize < (size_t)textDevice.size() - 3)
 	{
 		std::mt19937 generator;
-		generator.seed(textDevice.size());
+		generator.seed((unsigned long)(textDevice.size()));
 		std::uniform_int_distribution<qint64> distribution(3, textDevice.size() - sampleSize - 3);
 		const auto randomBlockOffset = distribution(generator);
 		const bool succ = stream.seek(randomBlockOffset);

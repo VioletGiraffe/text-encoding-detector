@@ -2,9 +2,6 @@
 
 #include "../ctextparser.h"
 
-#include <QString>
-#include <map>
-
 class CTrigramFrequencyTable_Base
 {
 public:

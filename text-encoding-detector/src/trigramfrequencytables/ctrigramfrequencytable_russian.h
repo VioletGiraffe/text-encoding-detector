@@ -2,9 +2,6 @@
 
 #include "ctrigramfrequencytable_base.h"
 
-#include <QString>
-#include <map>
-
 class CTrigramFrequencyTable_Russian : public CTrigramFrequencyTable_Base
 {
 public:

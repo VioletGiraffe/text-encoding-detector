@@ -2,10 +2,13 @@
 #include "trigramfrequencytables/ctrigramfrequencytable_english.h"
 #include "trigramfrequencytables/ctrigramfrequencytable_russian.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QTextCodec>
 #include <QIODevice>
 #include <QDebug>
 #include <QFile>
+#include <QTime>
+RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 #include <set>
@@ -30,8 +33,6 @@ static const CTextEncodingDetector::MatchFunction defaultMatchFunction =
 			}
 			return matchingNgramsCount > 0 ? match / matchingNgramsCount : 0.0f;
 });
-
-#include <QTime>
 
 template <typename T>
 std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& parameter, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base>> tablesForLanguages, CTextEncodingDetector::MatchFunction matchFunction)
