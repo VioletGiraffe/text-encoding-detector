@@ -10,7 +10,7 @@ MOC_DIR     = ../../build/text_encoding_detector
 UI_DIR      = ../../build/text_encoding_detector
 RCC_DIR     = ../../build/text_encoding_detector
 
-INCLUDEPATH += ../../qtutils
+INCLUDEPATH += ../../qtutils ../../cpputils/
 
 win*{
 	QMAKE_CXXFLAGS += /MP
