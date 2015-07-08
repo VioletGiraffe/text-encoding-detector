@@ -1,6 +1,7 @@
 #include "ctextencodingdetector.h"
 #include "trigramfrequencytables/ctrigramfrequencytable_english.h"
 #include "trigramfrequencytables/ctrigramfrequencytable_russian.h"
+#include "assert/advanced_assert.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QTextCodec>
@@ -12,7 +13,6 @@ RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 #include <set>
-#include <assert.h>
 
 static const CTextEncodingDetector::MatchFunction defaultMatchFunction =
 		CTextEncodingDetector::MatchFunction([](const CTextParser::OccurrenceTable& arg1, const CTextParser::OccurrenceTable& arg2) -> float {
@@ -87,7 +87,7 @@ std::pair<QString, QString> CTextEncodingDetector::decode(const QString & textFi
 	if (!detectionResult.empty())
 	{
 		QTextCodec * codec = QTextCodec::codecForName(detectionResult.front().encoding.toUtf8().data());
-		assert(codec);
+		assert_r(codec);
 		if (codec)
 		{
 			QFile file(textFilePath);
@@ -110,7 +110,7 @@ std::pair<QString, QString> CTextEncodingDetector::decode(const QByteArray & tex
 	if (!detectionResult.empty())
 	{
 		QTextCodec * codec = QTextCodec::codecForName(detectionResult.front().encoding.toUtf8().data());
-		assert(codec);
+		assert_r(codec);
 		if (codec)
 			return std::make_pair(codec->toUnicode(textData), detectionResult.front().encoding);
 	}
@@ -129,7 +129,7 @@ std::pair<QString, QString> CTextEncodingDetector::decode(QIODevice & textDevice
 	if (!detectionResult.empty())
 	{
 		QTextCodec * codec = QTextCodec::codecForName(detectionResult.front().encoding.toUtf8().data());
-		assert(codec);
+		assert_r(codec);
 		if (codec)
 			return std::make_pair(codec->toUnicode(textDevice.readAll()), detectionResult.front().encoding);
 	}

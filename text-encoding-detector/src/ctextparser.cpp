@@ -1,4 +1,5 @@
 #include "ctextparser.h"
+#include "assert/advanced_assert.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QTextStream>
@@ -7,7 +8,6 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <random>
-#include <assert.h>
 
 CTextParser::CTextParser()
 {
@@ -30,12 +30,8 @@ bool CTextParser::parse(const QByteArray & textData, const QString& codecName, s
 
 bool CTextParser::parse(QIODevice & textDevice, const QString& codecName, size_t sampleSize)
 {
-	assert(!codecName.isEmpty());
-	if (!textDevice.isOpen() && !textDevice.open(QIODevice::ReadOnly))
-	{
-		assert(!textDevice.open(QIODevice::ReadOnly));
-		return false;
-	}
+	assert_r(!codecName.isEmpty());
+	assert_and_return_r(!textDevice.isOpen() && !textDevice.open(QIODevice::ReadOnly), false);
 
 	QTextStream stream(&textDevice);
 	stream.setCodec(codecName.toUtf8().data());
@@ -57,7 +53,7 @@ bool CTextParser::parse(QIODevice & textDevice, const QString& codecName, size_t
 		}
 	}
 
-	assert(currentTrigram.length() == 3);
+	assert_r(currentTrigram.length() == 3);
 	++_parsingResult.trigramOccurrenceTable[currentTrigram];
 	++_parsingResult.totalTrigrammsCount;
 
@@ -68,7 +64,7 @@ bool CTextParser::parse(QIODevice & textDevice, const QString& codecName, size_t
 		std::uniform_int_distribution<qint64> distribution(3, textDevice.size() - sampleSize - 3);
 		const auto randomBlockOffset = distribution(generator);
 		const bool succ = stream.seek(randomBlockOffset);
-		assert(succ);
+		assert_r(succ);
 	}
 	else
 		sampleSize = 0;
