@@ -31,7 +31,7 @@ bool CTextParser::parse(const QByteArray & textData, const QString& codecName, s
 bool CTextParser::parse(QIODevice & textDevice, const QString& codecName, size_t sampleSize)
 {
 	assert_r(!codecName.isEmpty());
-	assert_and_return_r(!textDevice.isOpen() && !textDevice.open(QIODevice::ReadOnly), false);
+	assert_and_return_r(textDevice.isOpen() || textDevice.open(QIODevice::ReadOnly), false);
 
 	QTextStream stream(&textDevice);
 	stream.setCodec(codecName.toUtf8().data());
