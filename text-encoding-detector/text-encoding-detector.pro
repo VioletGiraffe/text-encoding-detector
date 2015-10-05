@@ -1,4 +1,3 @@
-DESTDIR  = ../../bin
 TARGET = text_encoding_detector
 TEMPLATE = lib
 CONFIG += staticlib
@@ -7,10 +6,19 @@ CONFIG += c++11
 
 QT = core
 
-OBJECTS_DIR = ../../build/text_encoding_detector
-MOC_DIR     = ../../build/text_encoding_detector
-UI_DIR      = ../../build/text_encoding_detector
-RCC_DIR     = ../../build/text_encoding_detector
+mac* | linux*{
+    CONFIG(release, debug|release):CONFIG += Release
+    CONFIG(debug, debug|release):CONFIG += Debug
+}
+
+Release:OUTPUT_DIR=release
+Debug:OUTPUT_DIR=debug
+
+DESTDIR  = ../../bin/$${OUTPUT_DIR}
+OBJECTS_DIR = ../../build/$${OUTPUT_DIR}/text_encoding_detector
+MOC_DIR     = ../../build/$${OUTPUT_DIR}/text_encoding_detector
+UI_DIR      = ../../build/$${OUTPUT_DIR}/text_encoding_detector
+RCC_DIR     = ../../build/$${OUTPUT_DIR}/text_encoding_detector
 
 INCLUDEPATH += ../../qtutils ../../cpputils/
 
