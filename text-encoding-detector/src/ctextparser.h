@@ -20,13 +20,13 @@ public:
 	struct OccurrenceTable
 	{
 		std::map<QString /*trigraph*/, quint64 /*count*/> trigramOccurrenceTable;
-		quint64 totalTrigrammsCount = 0;
+		quint64 totalTrigramsCount = 0;
 	};
 
 	// Subsequent calls to parse() will not reset the frequency table
-	bool parse(const QString& textFilePath, const QString& codecName, size_t sampleSize = 0);
-	bool parse(const QByteArray& textData, const QString& codecName, size_t sampleSize = 0);
-	bool parse(QIODevice& textDevice, const QString& codecName, size_t sampleSize = 0);
+	bool parse(const QString& textFilePath, const QString& codecName);
+	bool parse(const QByteArray& textData, const QString& codecName);
+	bool parse(QIODevice& textDevice, const QString& codecName);
 
 	// This method clears the table and sets counters to 0
 	void clear();

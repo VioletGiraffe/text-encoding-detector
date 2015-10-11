@@ -7,33 +7,32 @@ DISABLE_COMPILER_WARNINGS
 #include <QBuffer>
 RESTORE_COMPILER_WARNINGS
 
-#include <random>
-
 CTextParser::CTextParser()
 {
 }
 
-bool CTextParser::parse(const QString & textFilePath, const QString& codecName, size_t sampleSize)
+bool CTextParser::parse(const QString & textFilePath, const QString& codecName)
 {
 	QFile file(textFilePath);
 	if (!file.exists())
 		return false;
 
-	return parse(file, codecName, sampleSize);
+	return parse(file, codecName);
 }
 
-bool CTextParser::parse(const QByteArray & textData, const QString& codecName, size_t sampleSize)
+bool CTextParser::parse(const QByteArray & textData, const QString& codecName)
 {
 	QBuffer buffer(const_cast<QByteArray*>(&textData));
-	return parse(buffer, codecName, sampleSize);
+	return parse(buffer, codecName);
 }
 
-bool CTextParser::parse(QIODevice & textDevice, const QString& codecName, size_t sampleSize)
+bool CTextParser::parse(QIODevice & textDevice, const QString& codecName)
 {
 	assert_r(!codecName.isEmpty());
 	assert_and_return_r(textDevice.isOpen() || textDevice.open(QIODevice::ReadOnly), false);
 
 	QTextStream stream(&textDevice);
+	stream.setAutoDetectUnicode(false);
 	stream.setCodec(codecName.toUtf8().data());
 
 	// Read the first 3 symbols
@@ -55,35 +54,37 @@ bool CTextParser::parse(QIODevice & textDevice, const QString& codecName, size_t
 
 	assert_r(currentTrigram.length() == 3);
 	++_parsingResult.trigramOccurrenceTable[currentTrigram];
-	++_parsingResult.totalTrigrammsCount;
+	++_parsingResult.totalTrigramsCount;
 
-	if (sampleSize > 0 && sampleSize < (size_t)textDevice.size() - 3)
-	{
-		std::mt19937 generator;
-		generator.seed((unsigned long)(textDevice.size()));
-		std::uniform_int_distribution<qint64> distribution(3, textDevice.size() - sampleSize - 3);
-		const auto randomBlockOffset = distribution(generator);
-		const bool succ = stream.seek(randomBlockOffset);
-		assert_r(succ);
-	}
-	else
-		sampleSize = 0;
+	const qint64 numCharactersToAnalyze = 10000;
+	const qint64 numChunks = 10, chunkSize = numCharactersToAnalyze / numChunks;
+	static_assert(numCharactersToAnalyze > 0 && numChunks > 0, "Number of characters and number of chunks must be greater than 0");
 
-	size_t symbolCounter = 0;
-	while ((sampleSize == 0 && !stream.atEnd()) || (sampleSize > 0 && symbolCounter < sampleSize))
+	// Reading up to numCharactersToAnalyze characters, in numChunks x (numCharactersToAnalyze/numChunks) evenly spaced chunks
+
+	const qint64 stride = textDevice.size() <= numCharactersToAnalyze || numChunks == 0 ? 0 : (textDevice.size() - numCharactersToAnalyze) / (numChunks - 1);
+	qint64 charactersCounter = 0;
+	while (!stream.atEnd())
 	{
 		stream >> ch;
-		++symbolCounter;
-
-		if (ch.isLetter())
+		++charactersCounter;
+		if (charactersCounter > chunkSize)
 		{
-			ch = ch.toLower();
-			currentTrigram.remove(0, 1);
-			currentTrigram.append(ch);
-
-			++_parsingResult.trigramOccurrenceTable[currentTrigram];
-			++_parsingResult.totalTrigrammsCount;
+			if (stream.seek(stream.pos() + stride))
+			{
+				charactersCounter = 0;
+				continue;
+			}
+			else
+				break; // seek fails when we're trying to move past the end, which is our cue to stop
 		}
+
+		currentTrigram.remove(0, 1);
+		currentTrigram.append(ch.toLower());
+
+
+		++_parsingResult.trigramOccurrenceTable[currentTrigram];
+		++_parsingResult.totalTrigramsCount;
 	}
 
 	return true;
@@ -92,7 +93,7 @@ bool CTextParser::parse(QIODevice & textDevice, const QString& codecName, size_t
 void CTextParser::clear()
 {
 	_parsingResult.trigramOccurrenceTable.clear();
-	_parsingResult.totalTrigrammsCount = 0;
+	_parsingResult.totalTrigramsCount = 0;
 }
 
 const CTextParser::OccurrenceTable & CTextParser::parsingResult() const

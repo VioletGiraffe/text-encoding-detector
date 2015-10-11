@@ -12,27 +12,28 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
+#include <limits>
 #include <memory>
 #include <set>
 
 static const CTextEncodingDetector::MatchFunction defaultMatchFunction =
 		CTextEncodingDetector::MatchFunction([](const CTextParser::OccurrenceTable& arg1, const CTextParser::OccurrenceTable& arg2) -> float {
-			if (arg2.trigramOccurrenceTable.size() < arg1.trigramOccurrenceTable.size())
-				return defaultMatchFunction(arg2, arg1); // Performance optimization - the outer loop must iterate the smaller of the two containers for better performance
 
-			float match = 0.0f;
-			quint64 matchingNgramsCount = 0;
+			if (arg1.trigramOccurrenceTable.empty() || arg2.trigramOccurrenceTable.empty())
+				return 0.0f;
+			else if (arg2.trigramOccurrenceTable.size() < arg1.trigramOccurrenceTable.size())
+				return defaultMatchFunction(arg2, arg1); // Performance optimization - the outer loop must iterate the smaller of the two containers for better performance
+			
+			float deviation = 0.0f;
 			for (auto& n_gram1: arg1.trigramOccurrenceTable)
 			{
 				auto n_gram2 = arg2.trigramOccurrenceTable.find(n_gram1.first);
-				if (n_gram2 != arg2.trigramOccurrenceTable.end())
-				{
-					const float intersection = n_gram1.second / ((float)arg1.totalTrigrammsCount * n_gram2->second / (float)arg2.totalTrigrammsCount);
-					match += intersection <= 1.0f ? intersection : 1.0f/intersection;
-					++matchingNgramsCount;
-				}
+				deviation += n_gram2 != arg2.trigramOccurrenceTable.end() ?
+					fabs(n_gram1.second / (float) arg1.totalTrigramsCount - n_gram2->second / (float) arg2.totalTrigramsCount) :
+					n_gram1.second / (float) arg1.totalTrigramsCount;
 			}
-			return matchingNgramsCount > 0 ? match / matchingNgramsCount : 0.0f;
+
+			return deviation > 1e-5 ? 1.0f / deviation - 1.0f : std::numeric_limits<float>::max();
 });
 
 template <typename T>
@@ -60,7 +61,7 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInpu
 	for (auto& codec: differentCodecs)
 	{
 		CTextParser parser;
-		if (!parser.parse(dataOrInputDevice, QString(codec->name()), 3000))
+		if (!parser.parse(dataOrInputDevice, QString(codec->name())))
 			continue;
 
 		for (auto& table: tablesForLanguages)
@@ -78,8 +79,7 @@ std::pair<QString, QString> CTextEncodingDetector::decode(const QString & textFi
 	auto detectionResult = detect(textFilePath, tablesForLanguages, customMatchFunction);
 	qDebug() << "Encoding detection result for" << textFilePath;
 	for (auto& match: detectionResult)
-		if (match.match > 0.05f)
-			qDebug() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
+		qDebug() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
 
 	if (!detectionResult.empty())
 	{
@@ -101,8 +101,7 @@ std::pair<QString, QString> CTextEncodingDetector::decode(const QByteArray & tex
 	auto detectionResult = detect(textData, tablesForLanguages, customMatchFunction);
 	qDebug() << "Encoding detection result:";
 	for (auto& match: detectionResult)
-		if (match.match > 0.05f)
-			qDebug() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
+		qDebug() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
 
 	if (!detectionResult.empty())
 	{
@@ -120,8 +119,7 @@ std::pair<QString, QString> CTextEncodingDetector::decode(QIODevice & textDevice
 	auto detectionResult = detect(textDevice, tablesForLanguages, customMatchFunction);
 	qDebug() << "Encoding detection result:";
 	for (auto& match: detectionResult)
-		if (match.match > 0.05f)
-			qDebug() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
+		qDebug() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
 
 	if (!detectionResult.empty())
 	{

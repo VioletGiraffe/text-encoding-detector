@@ -418,7 +418,7 @@ CTrigramFrequencyTable_Russian::CTrigramFrequencyTable_Russian()
 		{nullptr, 0},
 	};
 
-	_table.totalTrigrammsCount = 1674564ull;
+	_table.totalTrigramsCount = 1674564ull;
 
 	for (quint64 i = 0; trigrams[i].trigram != nullptr; ++i)
 		_table.trigramOccurrenceTable[QString::fromUtf8(trigrams[i].trigram)] = trigrams[i].count;
