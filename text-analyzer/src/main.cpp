@@ -76,7 +76,6 @@ void main(int argc, char *argv[])
 	stream.setGenerateByteOrderMark(false);
 
 	stream << tableClassHeaderTemplate.arg(languageName);
-	stream.flush();
 
 	outputFile.close();
 	outputFile.setFileName(cppFileName);
@@ -86,10 +85,16 @@ void main(int argc, char *argv[])
 	const QString constructorLineTemplate("\t\t{\"%1\", %2ull},\n");
 	auto sortedTable = flip_map(parser.parsingResult().trigramOccurrenceTable);
 
+	const quint64 thresholdTrigramCount = parser.parsingResult().totalTrigrammsCount / 2000; // Trigram with less than 0.05% occurrence rate are discarded
+	quint64 actualTotalCount = 0;
 	for (auto it = sortedTable.rbegin(); it != sortedTable.rend(); ++it)
 	{
+		if (it->first < thresholdTrigramCount)
+			break;
+
 		constructorBody.append(constructorLineTemplate.arg(it->second).arg(it->first));
+		actualTotalCount += it->first;
 	}
 
-	stream << tableClassCppTemplate.arg(headerFileName).arg(languageName).arg(parser.parsingResult().totalTrigrammsCount).arg(constructorBody);
+	stream << tableClassCppTemplate.arg(headerFileName).arg(languageName).arg(actualTotalCount).arg(constructorBody);
 }

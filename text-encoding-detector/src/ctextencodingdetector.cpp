@@ -12,12 +12,13 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
+#include <memory>
 #include <set>
 
 static const CTextEncodingDetector::MatchFunction defaultMatchFunction =
 		CTextEncodingDetector::MatchFunction([](const CTextParser::OccurrenceTable& arg1, const CTextParser::OccurrenceTable& arg2) -> float {
 			if (arg2.trigramOccurrenceTable.size() < arg1.trigramOccurrenceTable.size())
-				return defaultMatchFunction(arg2, arg1); // Performance optimization - outer loop must be over the smaller of the 2 containers for better performance
+				return defaultMatchFunction(arg2, arg1); // Performance optimization - the outer loop must iterate the smaller of the two containers for better performance
 
 			float match = 0.0f;
 			quint64 matchingNgramsCount = 0;
@@ -35,7 +36,7 @@ static const CTextEncodingDetector::MatchFunction defaultMatchFunction =
 });
 
 template <typename T>
-std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& parameter, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base>> tablesForLanguages, CTextEncodingDetector::MatchFunction matchFunction)
+std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInputDevice, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base>> tablesForLanguages, CTextEncodingDetector::MatchFunction matchFunction)
 {
 	QTime start;
 	start.start();
@@ -53,17 +54,13 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& parameter,
 
 	std::set<QTextCodec*> differentCodecs;
 	for (const auto& codecName: availableCodecs)
-	{
 		if (!QString(codecName).toLower().contains("utf-8"))
-		{
 			differentCodecs.insert(QTextCodec::codecForName(codecName.data()));
-		}
-	}
 
 	for (auto& codec: differentCodecs)
 	{
 		CTextParser parser;
-		if (!parser.parse(parameter, QString(codec->name()), 3000))
+		if (!parser.parse(dataOrInputDevice, QString(codec->name()), 3000))
 			continue;
 
 		for (auto& table: tablesForLanguages)

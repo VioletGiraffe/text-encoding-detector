@@ -26,7 +26,9 @@ win32*:!*msvc2012:*msvc*:!*msvc2010:*msvc* {
 	QMAKE_CXXFLAGS += /FS
 }
 
-INCLUDEPATH += ../text-encoding-detector/src/
+INCLUDEPATH += \
+	../text-encoding-detector/src/ \
+	../../cpputils
 
 LIBS += -L../../bin -ltext_encoding_detector
 

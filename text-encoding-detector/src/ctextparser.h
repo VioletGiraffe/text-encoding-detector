@@ -19,9 +19,8 @@ public:
 
 	struct OccurrenceTable
 	{
-		OccurrenceTable(): totalTrigrammsCount(0) {}
 		std::map<QString /*trigraph*/, quint64 /*count*/> trigramOccurrenceTable;
-		quint64 totalTrigrammsCount;
+		quint64 totalTrigrammsCount = 0;
 	};
 
 	// Subsequent calls to parse() will not reset the frequency table
