@@ -5,3 +5,5 @@ A Qt-based library for detecting the encoding of binary data assuming it is a te
 Languages supported so far:
 * English
 * Russian.
+
+Adding support for new languages is extremely simple and fast, the appropriate tool is included in this repository.

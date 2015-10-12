@@ -16,6 +16,8 @@ RESTORE_COMPILER_WARNINGS
 #include <memory>
 #include <set>
 
+static const float plausibleMatchThreshold = 0.1f;
+
 static const CTextEncodingDetector::MatchFunction defaultMatchFunction =
 		CTextEncodingDetector::MatchFunction([](const CTextParser::OccurrenceTable& arg1, const CTextParser::OccurrenceTable& arg2) -> float {
 
@@ -81,7 +83,7 @@ std::pair<QString, QString> CTextEncodingDetector::decode(const QString & textFi
 	for (auto& match: detectionResult)
 		qDebug() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
 
-	if (!detectionResult.empty())
+	if (!detectionResult.empty() && detectionResult.front().match > plausibleMatchThreshold)
 	{
 		QTextCodec * codec = QTextCodec::codecForName(detectionResult.front().encoding.toUtf8().data());
 		assert_r(codec);
@@ -103,7 +105,7 @@ std::pair<QString, QString> CTextEncodingDetector::decode(const QByteArray & tex
 	for (auto& match: detectionResult)
 		qDebug() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
 
-	if (!detectionResult.empty())
+	if (!detectionResult.empty() && detectionResult.front().match > plausibleMatchThreshold)
 	{
 		QTextCodec * codec = QTextCodec::codecForName(detectionResult.front().encoding.toUtf8().data());
 		assert_r(codec);
@@ -121,7 +123,7 @@ std::pair<QString, QString> CTextEncodingDetector::decode(QIODevice & textDevice
 	for (auto& match: detectionResult)
 		qDebug() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
 
-	if (!detectionResult.empty())
+	if (!detectionResult.empty() && detectionResult.front().match > plausibleMatchThreshold)
 	{
 		QTextCodec * codec = QTextCodec::codecForName(detectionResult.front().encoding.toUtf8().data());
 		assert_r(codec);
