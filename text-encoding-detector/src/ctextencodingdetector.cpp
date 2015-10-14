@@ -76,7 +76,7 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInpu
 }
 
 
-std::pair<QString, QString> CTextEncodingDetector::decode(const QString & textFilePath, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages, CTextEncodingDetector::MatchFunction customMatchFunction)
+CTextEncodingDetector::DetectionResult CTextEncodingDetector::decode(const QString & textFilePath, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages, CTextEncodingDetector::MatchFunction customMatchFunction)
 {
 	auto detectionResult = detect(textFilePath, tablesForLanguages, customMatchFunction);
 	qDebug() << "Encoding detection result for" << textFilePath;
@@ -91,14 +91,14 @@ std::pair<QString, QString> CTextEncodingDetector::decode(const QString & textFi
 		{
 			QFile file(textFilePath);
 			file.open(QIODevice::ReadOnly);
-			return std::make_pair(codec->toUnicode(file.readAll()), detectionResult.front().encoding);
+			return DetectionResult{codec->toUnicode(file.readAll()), detectionResult.front().encoding, detectionResult.front().language};
 		}
 	}
 
-	return std::pair<QString, QString>();
+	return DetectionResult();
 }
 
-std::pair<QString, QString> CTextEncodingDetector::decode(const QByteArray & textData, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages, CTextEncodingDetector::MatchFunction customMatchFunction)
+CTextEncodingDetector::DetectionResult CTextEncodingDetector::decode(const QByteArray & textData, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages, CTextEncodingDetector::MatchFunction customMatchFunction)
 {
 	auto detectionResult = detect(textData, tablesForLanguages, customMatchFunction);
 	qDebug() << "Encoding detection result:";
@@ -110,13 +110,13 @@ std::pair<QString, QString> CTextEncodingDetector::decode(const QByteArray & tex
 		QTextCodec * codec = QTextCodec::codecForName(detectionResult.front().encoding.toUtf8().data());
 		assert_r(codec);
 		if (codec)
-			return std::make_pair(codec->toUnicode(textData), detectionResult.front().encoding);
+			return DetectionResult{codec->toUnicode(textData), detectionResult.front().encoding, detectionResult.front().language};
 	}
 
-	return std::pair<QString, QString>();
+	return DetectionResult();
 }
 
-std::pair<QString, QString> CTextEncodingDetector::decode(QIODevice & textDevice, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages, CTextEncodingDetector::MatchFunction customMatchFunction)
+CTextEncodingDetector::DetectionResult CTextEncodingDetector::decode(QIODevice & textDevice, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages, CTextEncodingDetector::MatchFunction customMatchFunction)
 {
 	auto detectionResult = detect(textDevice, tablesForLanguages, customMatchFunction);
 	qDebug() << "Encoding detection result:";
@@ -128,10 +128,10 @@ std::pair<QString, QString> CTextEncodingDetector::decode(QIODevice & textDevice
 		QTextCodec * codec = QTextCodec::codecForName(detectionResult.front().encoding.toUtf8().data());
 		assert_r(codec);
 		if (codec)
-			return std::make_pair(codec->toUnicode(textDevice.readAll()), detectionResult.front().encoding);
+			return DetectionResult{codec->toUnicode(textDevice.readAll()), detectionResult.front().encoding, detectionResult.front().language};
 	}
 
-	return std::pair<QString, QString>();
+	return DetectionResult();
 }
 
 std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetector::detect(const QString & textFilePath, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages, MatchFunction customMatchFunction)

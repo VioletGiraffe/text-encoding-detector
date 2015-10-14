@@ -3,7 +3,6 @@
 
 #include "ctextparser.h"
 
-#include <utility>
 #include <functional>
 #include <vector>
 #include <memory>
@@ -15,6 +14,13 @@ class QByteArray;
 class CTextEncodingDetector
 {
 public:
+	struct DetectionResult
+	{
+		QString text;
+		QString encoding;
+		QString language;
+	};
+
 	typedef std::function<float (const CTextParser::OccurrenceTable& arg1, const CTextParser::OccurrenceTable& arg2)> MatchFunction;
 
 	struct EncodingDetectionResult {
@@ -24,11 +30,11 @@ public:
 		float match; // 0.0 to 1.0
 	};
 
-	static std::pair<QString/*text*/, QString /*encoding*/>
+	static DetectionResult
 	decode(const QString& textFilePath, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages = std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> >(), MatchFunction customMatchFunction = MatchFunction());
-	static std::pair<QString/*text*/, QString /*encoding*/>
+	static DetectionResult
 	decode(const QByteArray& textData, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages = std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> >(), MatchFunction customMatchFunction = MatchFunction());
-	static std::pair<QString/*text*/, QString /*encoding*/>
+	static DetectionResult
 	decode(QIODevice& textDevice, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages = std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> >(), MatchFunction customMatchFunction = MatchFunction());
 
 
