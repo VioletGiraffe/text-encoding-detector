@@ -16,7 +16,9 @@ RESTORE_COMPILER_WARNINGS
 #include <memory>
 #include <set>
 
-static const float plausibleMatchThreshold = 0.1f;
+#include <math.h>
+
+const float plausibleMatchThreshold = 0.1f;
 
 static const CTextEncodingDetector::MatchFunction defaultMatchFunction =
 		CTextEncodingDetector::MatchFunction([](const CTextParser::OccurrenceTable& arg1, const CTextParser::OccurrenceTable& arg2) -> float {
@@ -25,7 +27,7 @@ static const CTextEncodingDetector::MatchFunction defaultMatchFunction =
 				return 0.0f;
 			else if (arg2.trigramOccurrenceTable.size() < arg1.trigramOccurrenceTable.size())
 				return defaultMatchFunction(arg2, arg1); // Performance optimization - the outer loop must iterate the smaller of the two containers for better performance
-			
+
 			float deviation = 0.0f;
 			for (auto& n_gram1: arg1.trigramOccurrenceTable)
 			{
