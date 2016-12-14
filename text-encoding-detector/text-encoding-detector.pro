@@ -7,8 +7,8 @@ CONFIG += c++11
 QT = core
 
 mac* | linux*{
-    CONFIG(release, debug|release):CONFIG += Release
-    CONFIG(debug, debug|release):CONFIG += Debug
+	CONFIG(release, debug|release):CONFIG += Release
+	CONFIG(debug, debug|release):CONFIG += Debug
 }
 
 Release:OUTPUT_DIR=release
@@ -27,16 +27,16 @@ win*{
 	DEFINES += WIN32_LEAN_AND_MEAN NOMINMAX
 	QMAKE_CXXFLAGS_WARN_ON = -W4
 
-	QMAKE_LFLAGS += /INCREMENTAL /DEBUG:FASTLINK
+	QMAKE_LFLAGS += /DEBUG:FASTLINK
+
+	Debug:QMAKE_LFLAGS += /INCREMENTAL
+	Release:QMAKE_LFLAGS += /OPT:REF /OPT:ICF
 }
 
 linux*|mac*{
 	QMAKE_CXXFLAGS += -pedantic-errors
 	QMAKE_CFLAGS += -pedantic-errors
 	QMAKE_CXXFLAGS_WARN_ON = -Wall -Wno-c++11-extensions -Wno-local-type-template-args -Wno-deprecated-register
-
-	CONFIG(release, debug|release):CONFIG += Release
-	CONFIG(debug, debug|release):CONFIG += Debug
 
 	Release:DEFINES += NDEBUG=1
 	Debug:DEFINES += _DEBUG
