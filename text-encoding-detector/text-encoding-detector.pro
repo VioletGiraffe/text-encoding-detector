@@ -15,10 +15,10 @@ Release:OUTPUT_DIR=release
 Debug:OUTPUT_DIR=debug
 
 DESTDIR  = ../../bin/$${OUTPUT_DIR}
-OBJECTS_DIR = ../../build/$${OUTPUT_DIR}/text_encoding_detector
-MOC_DIR     = ../../build/$${OUTPUT_DIR}/text_encoding_detector
-UI_DIR      = ../../build/$${OUTPUT_DIR}/text_encoding_detector
-RCC_DIR     = ../../build/$${OUTPUT_DIR}/text_encoding_detector
+OBJECTS_DIR = ../../build/$${OUTPUT_DIR}/$${TARGET}
+MOC_DIR     = ../../build/$${OUTPUT_DIR}/$${TARGET}
+UI_DIR      = ../../build/$${OUTPUT_DIR}/$${TARGET}
+RCC_DIR     = ../../build/$${OUTPUT_DIR}/$${TARGET}
 
 INCLUDEPATH += ../../qtutils ../../cpputils/
 
