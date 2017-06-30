@@ -2,7 +2,7 @@ TARGET = text_encoding_detector
 TEMPLATE = lib
 CONFIG += staticlib
 
-CONFIG += c++11
+CONFIG += c++14
 
 QT = core
 
