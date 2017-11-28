@@ -73,7 +73,7 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInpu
 	}
 
 	std::sort(match.begin(), match.end(), [](const CTextEncodingDetector::EncodingDetectionResult& l, const CTextEncodingDetector::EncodingDetectionResult& r){return l.match > r.match;});
-	qDebug() << __FUNCTION__ << "Time taken:" << start.elapsed() << "ms";
+	qInfo() << __FUNCTION__ << "Time taken:" << start.elapsed() << "ms";
 	return match;
 }
 
@@ -81,9 +81,9 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInpu
 CTextEncodingDetector::DetectionResult CTextEncodingDetector::decode(const QString & textFilePath, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages, CTextEncodingDetector::MatchFunction customMatchFunction)
 {
 	auto detectionResult = detect(textFilePath, tablesForLanguages, customMatchFunction);
-	qDebug() << "Encoding detection result for" << textFilePath;
+	qInfo() << "Encoding detection result for" << textFilePath;
 	for (auto& match: detectionResult)
-		qDebug() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
+		qInfo() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
 
 	if (!detectionResult.empty() && detectionResult.front().match > plausibleMatchThreshold)
 	{
@@ -103,9 +103,9 @@ CTextEncodingDetector::DetectionResult CTextEncodingDetector::decode(const QStri
 CTextEncodingDetector::DetectionResult CTextEncodingDetector::decode(const QByteArray & textData, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages, CTextEncodingDetector::MatchFunction customMatchFunction)
 {
 	auto detectionResult = detect(textData, tablesForLanguages, customMatchFunction);
-	qDebug() << "Encoding detection result:";
+	qInfo() << "Encoding detection result:";
 	for (auto& match: detectionResult)
-		qDebug() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
+		qInfo() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
 
 	if (!detectionResult.empty() && detectionResult.front().match > plausibleMatchThreshold)
 	{
@@ -121,9 +121,9 @@ CTextEncodingDetector::DetectionResult CTextEncodingDetector::decode(const QByte
 CTextEncodingDetector::DetectionResult CTextEncodingDetector::decode(QIODevice & textDevice, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages, CTextEncodingDetector::MatchFunction customMatchFunction)
 {
 	auto detectionResult = detect(textDevice, tablesForLanguages, customMatchFunction);
-	qDebug() << "Encoding detection result:";
+	qInfo() << "Encoding detection result:";
 	for (auto& match: detectionResult)
-		qDebug() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
+		qInfo() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
 
 	if (!detectionResult.empty() && detectionResult.front().match > plausibleMatchThreshold)
 	{
