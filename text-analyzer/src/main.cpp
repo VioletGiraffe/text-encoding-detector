@@ -1,11 +1,11 @@
 #include "ctextparser.h"
 
-#include <QDebug>
 #include <QTextStream>
 #include <QFile>
 
 #include <assert.h>
 #include <algorithm>
+#include <iostream>
 #include <utility>
 
 static const QString tableClassHeaderTemplate =
@@ -51,10 +51,22 @@ std::multimap<B,A> flip_map(const std::map<A,B> &src)
 	return dst;
 }
 
-void main(int argc, char *argv[])
+static void printUsageInstructions()
+{
+	std::cout << "Usage:" << std::endl;
+	std::cout << "text_analyzer <language name> <path to textfile 1> [path to textfile 2] ... [path to textfile N]" << std::endl;
+	std::cout << "Where the text files are encoded in UTF-8." << std::endl;
+	std::cout << std::endl;
+	std::cout << "Output: ctrigramfrequencytable_<Language name>.h and ctrigramfrequencytable_<Language name>.cpp source files in the working directory, containing the declaration and definition of the CTrigramFrequencyTable_<Language name> class." << std::endl;
+}
+
+int main(int argc, char *argv[])
 {
 	if (argc < 3)
-		return;
+	{
+		printUsageInstructions();
+		return -1;
+	}
 
 	const QString languageName(argv[1]);
 
@@ -62,7 +74,10 @@ void main(int argc, char *argv[])
 	for (int i = 2; i < argc; ++i)
 	{
 		if (!parser.parse(QString(argv[i]), "UTF-8"))
-			qDebug() << "Failed to parse" << argv[i];
+		{
+			std::cout << "Failed to parse" << argv[i] << std::endl;
+			std::cout << "Make sure it's a UTF-8 text file." << argv[i] << std::endl;
+		}
 	}
 
 	const QString className = QString("CTrigramFrequencyTable_") + languageName;
@@ -85,7 +100,7 @@ void main(int argc, char *argv[])
 	const QString constructorLineTemplate("\t\t{\"%1\", %2ull},\n");
 	auto sortedTable = flip_map(parser.parsingResult().trigramOccurrenceTable);
 
-	const quint64 thresholdTrigramCount = parser.parsingResult().totalTrigrammsCount / 2000; // Trigram with less than 0.05% occurrence rate are discarded
+	const quint64 thresholdTrigramCount = parser.parsingResult().totalTrigramsCount / 2000; // Trigram with less than 0.05% occurrence rate are discarded
 	quint64 actualTotalCount = 0;
 	for (auto it = sortedTable.rbegin(); it != sortedTable.rend(); ++it)
 	{
@@ -97,4 +112,6 @@ void main(int argc, char *argv[])
 	}
 
 	stream << tableClassCppTemplate.arg(headerFileName).arg(languageName).arg(actualTotalCount).arg(constructorBody);
+
+	return 0;
 }
