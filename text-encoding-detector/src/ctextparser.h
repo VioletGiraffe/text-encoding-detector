@@ -15,7 +15,7 @@ class QIODevice;
 class CTextParser
 {
 public:
-	CTextParser();
+	CTextParser() = default;
 
 	struct OccurrenceTable
 	{

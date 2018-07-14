@@ -7,10 +7,6 @@ DISABLE_COMPILER_WARNINGS
 #include <QBuffer>
 RESTORE_COMPILER_WARNINGS
 
-CTextParser::CTextParser()
-{
-}
-
 bool CTextParser::parse(const QString & textFilePath, const QString& codecName)
 {
 	QFile file(textFilePath);

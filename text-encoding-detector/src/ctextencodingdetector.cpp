@@ -20,42 +20,39 @@ RESTORE_COMPILER_WARNINGS
 
 const float plausibleMatchThreshold = 0.1f;
 
-static const CTextEncodingDetector::MatchFunction defaultMatchFunction =
-		CTextEncodingDetector::MatchFunction([](const CTextParser::OccurrenceTable& arg1, const CTextParser::OccurrenceTable& arg2) -> float {
+inline float defaultMatchFunction(const CTextParser::OccurrenceTable& arg1, const CTextParser::OccurrenceTable& arg2)
+{
+	if (arg1.trigramOccurrenceTable.empty() || arg2.trigramOccurrenceTable.empty())
+		return 0.0f;
+	else if (arg2.trigramOccurrenceTable.size() < arg1.trigramOccurrenceTable.size())
+		return defaultMatchFunction(arg2, arg1); // Performance optimization: the outer loop must iterate the smaller of the two containers for better performance
 
-			if (arg1.trigramOccurrenceTable.empty() || arg2.trigramOccurrenceTable.empty())
-				return 0.0f;
-			else if (arg2.trigramOccurrenceTable.size() < arg1.trigramOccurrenceTable.size())
-				return defaultMatchFunction(arg2, arg1); // Performance optimization - the outer loop must iterate the smaller of the two containers for better performance
+	float deviation = 0.0f;
+	for (auto& n_gram1: arg1.trigramOccurrenceTable)
+	{
+		auto n_gram2 = arg2.trigramOccurrenceTable.find(n_gram1.first);
+		deviation += n_gram2 != arg2.trigramOccurrenceTable.end() ?
+			fabs(n_gram1.second / (float) arg1.totalTrigramsCount - n_gram2->second / (float) arg2.totalTrigramsCount) :
+			n_gram1.second / (float) arg1.totalTrigramsCount;
+	}
 
-			float deviation = 0.0f;
-			for (auto& n_gram1: arg1.trigramOccurrenceTable)
-			{
-				auto n_gram2 = arg2.trigramOccurrenceTable.find(n_gram1.first);
-				deviation += n_gram2 != arg2.trigramOccurrenceTable.end() ?
-					fabs(n_gram1.second / (float) arg1.totalTrigramsCount - n_gram2->second / (float) arg2.totalTrigramsCount) :
-					n_gram1.second / (float) arg1.totalTrigramsCount;
-			}
-
-			return deviation > 1e-5 ? 1.0f / deviation - 1.0f : std::numeric_limits<float>::max();
-});
+	return deviation > 1e-5 ? 1.0f / deviation - 1.0f : std::numeric_limits<float>::max();
+}
 
 template <typename T>
-std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInputDevice, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base>> tablesForLanguages, CTextEncodingDetector::MatchFunction matchFunction)
+std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInputDevice, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
 	QTime start;
 	start.start();
 	auto availableCodecs = QTextCodec::availableCodecs();
 	std::vector<CTextEncodingDetector::EncodingDetectionResult> match;
 
+	typename std::decay<decltype(tablesForLanguages)>::type defaultTables;
 	if (tablesForLanguages.empty())
 	{
-		tablesForLanguages.emplace_back(std::make_shared<CTrigramFrequencyTable_English>());
-		tablesForLanguages.emplace_back(std::make_shared<CTrigramFrequencyTable_Russian>());
+		defaultTables.emplace_back(std::move(std::make_unique<CTrigramFrequencyTable_English>()));
+		defaultTables.emplace_back(std::move(std::make_unique<CTrigramFrequencyTable_Russian>()));
 	}
-
-	if (!matchFunction)
-		matchFunction = defaultMatchFunction;
 
 	std::set<QTextCodec*> differentCodecs;
 	for (const auto& codecName: availableCodecs)
@@ -68,22 +65,27 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInpu
 		if (!parser.parse(dataOrInputDevice, QString(codec->name())))
 			continue;
 
-		for (auto& table: tablesForLanguages)
-			match.emplace_back(CTextEncodingDetector::EncodingDetectionResult(codec->name(), table->language(), matchFunction(table->trigramOccurrenceTable(), parser.parsingResult())));
+		const auto& languageStatisticsTables = tablesForLanguages.empty() ? defaultTables : tablesForLanguages;
+		for (auto& table: languageStatisticsTables)
+			match.emplace_back(CTextEncodingDetector::EncodingDetectionResult{ codec->name(), table->language(), defaultMatchFunction(table->trigramOccurrenceTable(), parser.parsingResult()) });
 	}
 
 	std::sort(match.begin(), match.end(), [](const CTextEncodingDetector::EncodingDetectionResult& l, const CTextEncodingDetector::EncodingDetectionResult& r){return l.match > r.match;});
+#ifdef _DEBUG
 	qInfo() << __FUNCTION__ << "Time taken:" << start.elapsed() << "ms";
+#endif;
 	return match;
 }
 
 
-CTextEncodingDetector::DetectionResult CTextEncodingDetector::decode(const QString & textFilePath, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages, CTextEncodingDetector::MatchFunction customMatchFunction)
+CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QString & textFilePath, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
-	auto detectionResult = detect(textFilePath, tablesForLanguages, customMatchFunction);
+	auto detectionResult = detect(textFilePath, tablesForLanguages);
+#ifdef _DEBUG
 	qInfo() << "Encoding detection result for" << textFilePath;
 	for (auto& match: detectionResult)
 		qInfo() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
+#endif
 
 	if (!detectionResult.empty() && detectionResult.front().match > plausibleMatchThreshold)
 	{
@@ -93,60 +95,64 @@ CTextEncodingDetector::DetectionResult CTextEncodingDetector::decode(const QStri
 		{
 			QFile file(textFilePath);
 			file.open(QIODevice::ReadOnly);
-			return DetectionResult{codec->toUnicode(file.readAll()), detectionResult.front().encoding, detectionResult.front().language};
+			return DecodedText{codec->toUnicode(file.readAll()), detectionResult.front().encoding, detectionResult.front().language};
 		}
 	}
 
-	return DetectionResult();
+	return DecodedText();
 }
 
-CTextEncodingDetector::DetectionResult CTextEncodingDetector::decode(const QByteArray & textData, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages, CTextEncodingDetector::MatchFunction customMatchFunction)
+CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QByteArray & textData, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
-	auto detectionResult = detect(textData, tablesForLanguages, customMatchFunction);
+	auto detectionResult = detect(textData, tablesForLanguages);
+#ifdef _DEBUG
 	qInfo() << "Encoding detection result:";
 	for (auto& match: detectionResult)
 		qInfo() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
+#endif
 
 	if (!detectionResult.empty() && detectionResult.front().match > plausibleMatchThreshold)
 	{
 		QTextCodec * codec = QTextCodec::codecForName(detectionResult.front().encoding.toUtf8().data());
 		assert_r(codec);
 		if (codec)
-			return DetectionResult{codec->toUnicode(textData), detectionResult.front().encoding, detectionResult.front().language};
+			return DecodedText{codec->toUnicode(textData), detectionResult.front().encoding, detectionResult.front().language};
 	}
 
-	return DetectionResult();
+	return DecodedText();
 }
 
-CTextEncodingDetector::DetectionResult CTextEncodingDetector::decode(QIODevice & textDevice, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages, CTextEncodingDetector::MatchFunction customMatchFunction)
+CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(QIODevice & textDevice, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
-	auto detectionResult = detect(textDevice, tablesForLanguages, customMatchFunction);
+	auto detectionResult = detect(textDevice, tablesForLanguages);
+#ifdef _DEBUG
 	qInfo() << "Encoding detection result:";
 	for (auto& match: detectionResult)
 		qInfo() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
+#endif
 
 	if (!detectionResult.empty() && detectionResult.front().match > plausibleMatchThreshold)
 	{
 		QTextCodec * codec = QTextCodec::codecForName(detectionResult.front().encoding.toUtf8().data());
 		assert_r(codec);
 		if (codec)
-			return DetectionResult{codec->toUnicode(textDevice.readAll()), detectionResult.front().encoding, detectionResult.front().language};
+			return DecodedText{codec->toUnicode(textDevice.readAll()), detectionResult.front().encoding, detectionResult.front().language};
 	}
 
-	return DetectionResult();
+	return DecodedText();
 }
 
-std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetector::detect(const QString & textFilePath, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages, MatchFunction customMatchFunction)
+std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetector::detect(const QString & textFilePath, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
-	return ::detect(textFilePath, tablesForLanguages, customMatchFunction);
+	return ::detect(textFilePath, tablesForLanguages);
 }
 
-std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetector::detect(const QByteArray & textData, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages, MatchFunction customMatchFunction)
+std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetector::detect(const QByteArray & textData, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
-	return ::detect(textData, tablesForLanguages, customMatchFunction);
+	return ::detect(textData, tablesForLanguages);
 }
 
-std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetector::detect(QIODevice & textDevice, std::vector<std::shared_ptr<CTrigramFrequencyTable_Base> > tablesForLanguages, MatchFunction customMatchFunction)
+std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetector::detect(QIODevice & textDevice, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
-	return ::detect(textDevice, tablesForLanguages, customMatchFunction);
+	return ::detect(textDevice, tablesForLanguages);
 }
