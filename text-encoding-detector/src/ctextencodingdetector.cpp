@@ -36,7 +36,7 @@ inline float defaultMatchFunction(const CTextParser::OccurrenceTable& arg1, cons
 			n_gram1.second / (float) arg1.totalTrigramsCount;
 	}
 
-	return deviation > 1e-5 ? 1.0f / deviation - 1.0f : std::numeric_limits<float>::max();
+	return deviation > 1e-5f ? 1.0f / deviation - 1.0f : std::numeric_limits<float>::max();
 }
 
 template <typename T>
@@ -50,13 +50,13 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInpu
 	typename std::decay<decltype(tablesForLanguages)>::type defaultTables;
 	if (tablesForLanguages.empty())
 	{
-		defaultTables.emplace_back(std::move(std::make_unique<CTrigramFrequencyTable_English>()));
-		defaultTables.emplace_back(std::move(std::make_unique<CTrigramFrequencyTable_Russian>()));
+		defaultTables.emplace_back(std::make_unique<CTrigramFrequencyTable_English>());
+		defaultTables.emplace_back(std::make_unique<CTrigramFrequencyTable_Russian>());
 	}
 
 	std::set<QTextCodec*> differentCodecs;
 	for (const auto& codecName: availableCodecs)
-		if (!QString(codecName).toLower().contains("utf-8"))
+		if (!QString(codecName).contains("utf-8", Qt::CaseInsensitive))
 			differentCodecs.insert(QTextCodec::codecForName(codecName.data()));
 
 	for (auto& codec: differentCodecs)
@@ -73,7 +73,7 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInpu
 	std::sort(match.begin(), match.end(), [](const CTextEncodingDetector::EncodingDetectionResult& l, const CTextEncodingDetector::EncodingDetectionResult& r){return l.match > r.match;});
 #ifdef _DEBUG
 	qInfo() << __FUNCTION__ << "Time taken:" << start.elapsed() << "ms";
-#endif;
+#endif
 	return match;
 }
 
@@ -84,7 +84,7 @@ CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QString &
 #ifdef _DEBUG
 	qInfo() << "Encoding detection result for" << textFilePath;
 	for (auto& match: detectionResult)
-		qInfo() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
+		qInfo() << QString("%1, %2: %3").arg(match.language, match.encoding, QString::number((double)match.match));
 #endif
 
 	if (!detectionResult.empty() && detectionResult.front().match > plausibleMatchThreshold)
@@ -108,7 +108,7 @@ CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QByteArra
 #ifdef _DEBUG
 	qInfo() << "Encoding detection result:";
 	for (auto& match: detectionResult)
-		qInfo() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
+		qInfo() << QString("%1, %2: %3").arg(match.language, match.encoding, QString::number((double)match.match));
 #endif
 
 	if (!detectionResult.empty() && detectionResult.front().match > plausibleMatchThreshold)
@@ -128,7 +128,7 @@ CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(QIODevice & tex
 #ifdef _DEBUG
 	qInfo() << "Encoding detection result:";
 	for (auto& match: detectionResult)
-		qInfo() << QString("%1, %2: %3").arg(match.language).arg(match.encoding).arg(match.match);
+		qInfo() << QString("%1, %2: %3").arg(match.language, match.encoding, QString::number((double)match.match));
 #endif
 
 	if (!detectionResult.empty() && detectionResult.front().match > plausibleMatchThreshold)
