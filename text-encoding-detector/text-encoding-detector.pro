@@ -39,7 +39,7 @@ RCC_DIR     = ../../build/$${OUTPUT_DIR}/$${TARGET}
 INCLUDEPATH += ../../qtutils ../../cpputils/
 
 win*{
-	QMAKE_CXXFLAGS += /MP
+	QMAKE_CXXFLAGS += /MP /Zi
 	DEFINES += WIN32_LEAN_AND_MEAN NOMINMAX
 	QMAKE_CXXFLAGS_WARN_ON = -W4
 
