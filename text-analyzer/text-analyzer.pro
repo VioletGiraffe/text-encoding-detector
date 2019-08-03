@@ -16,7 +16,7 @@ win*{
 	QMAKE_CXXFLAGS_WARN_ON = -W4
 }
 
-linux*|mac*{
+linux*|mac*|freebsd{
 	QMAKE_CXXFLAGS += -pedantic-errors
 	QMAKE_CFLAGS += -pedantic-errors
 	QMAKE_CXXFLAGS_WARN_ON = -Wall -Wno-c++11-extensions -Wno-local-type-template-args -Wno-deprecated-register
