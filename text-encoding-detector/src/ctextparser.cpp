@@ -18,7 +18,10 @@ bool CTextParser::parse(const QString & textFilePath, const QString& codecName)
 
 bool CTextParser::parse(const QByteArray & textData, const QString& codecName)
 {
-	QBuffer buffer(const_cast<QByteArray*>(&textData));
+	QByteArray mutableData = textData;
+	QBuffer buffer(std::addressof(mutableData));
+	const bool openedSuccessfully = buffer.open(QIODevice::ReadOnly);
+	assert_and_return_r(openedSuccessfully, false);
 	return parse(buffer, codecName);
 }
 
@@ -27,7 +30,7 @@ bool CTextParser::parse(QIODevice & textDevice, const QString& codecName)
 	assert_r(!codecName.isEmpty());
 	assert_and_return_r(textDevice.isOpen() || textDevice.open(QIODevice::ReadOnly), false);
 
-	QTextStream stream(&textDevice);
+	QTextStream stream(std::addressof(textDevice));
 	stream.setAutoDetectUnicode(false);
 	stream.setCodec(codecName.toUtf8().data());
 
