@@ -4,7 +4,6 @@
 DISABLE_COMPILER_WARNINGS
 #include <QTextStream>
 #include <QFile>
-#include <QBuffer>
 RESTORE_COMPILER_WARNINGS
 
 bool CTextParser::parse(const QString & textFilePath, const QString& codecName)
@@ -13,22 +12,19 @@ bool CTextParser::parse(const QString & textFilePath, const QString& codecName)
 	if (!file.exists())
 		return false;
 
-	return parse(file, codecName);
+	// TODO: avoid reading the whole file. Currently (as of Qt 5.13.2) not easily doable due to bugs in QBuffer (seek(), bytesAvailable() behave in a weird way).
+	return parse(file.readAll(), codecName);
 }
 
-bool CTextParser::parse(const QByteArray & textData, const QString& codecName)
+bool CTextParser::parse(QIODevice& textDevice, const QString& codecName)
 {
-	QByteArray mutableData = textData;
-	QBuffer buffer(std::addressof(mutableData));
-	const bool openedSuccessfully = buffer.open(QIODevice::ReadOnly);
-	assert_and_return_r(openedSuccessfully, false);
-	return parse(buffer, codecName);
+	// TODO: avoid reading the whole file. Currently (as of Qt 5.13.2) not easily doable due to bugs in QBuffer (seek(), bytesAvailable() behave in a weird way).
+	return parse(textDevice.readAll(), codecName);
 }
 
-bool CTextParser::parse(QIODevice & textDevice, const QString& codecName)
+bool CTextParser::parse(QByteArray& textDevice, const QString& codecName)
 {
 	assert_r(!codecName.isEmpty());
-	assert_and_return_r(textDevice.isOpen() || textDevice.open(QIODevice::ReadOnly), false);
 
 	QTextStream stream(std::addressof(textDevice));
 	stream.setAutoDetectUnicode(false);
@@ -69,6 +65,7 @@ bool CTextParser::parse(QIODevice & textDevice, const QString& codecName)
 		++charactersCounter;
 		if (charactersCounter > chunkSize)
 		{
+			//auto newPos = std::min(stream.pos() + stride, textDevice.size());
 			if (stream.seek(stream.pos() + stride))
 			{
 				charactersCounter = 0;
