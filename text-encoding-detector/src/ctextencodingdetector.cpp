@@ -8,7 +8,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QIODevice>
 #include <QDebug>
 #include <QFile>
-#include <QTime>
+#include <QElapsedTimer>
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
@@ -42,7 +42,7 @@ inline float defaultMatchFunction(const CTextParser::OccurrenceTable& arg1, cons
 template <typename T>
 std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInputDevice, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
-	QTime start;
+    QElapsedTimer start;
 	start.start();
 	auto availableCodecs = QTextCodec::availableCodecs();
 	std::vector<CTextEncodingDetector::EncodingDetectionResult> match;
