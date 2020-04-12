@@ -36,7 +36,10 @@ MOC_DIR     = ../../build/$${OUTPUT_DIR}/$${TARGET}
 UI_DIR      = ../../build/$${OUTPUT_DIR}/$${TARGET}
 RCC_DIR     = ../../build/$${OUTPUT_DIR}/$${TARGET}
 
-INCLUDEPATH += ../../qtutils ../../cpputils/
+INCLUDEPATH += \
+	../../qtutils \
+	../../cpputils \
+	../../cpp-template-utils
 
 win*{
 	QMAKE_CXXFLAGS += /MP /Zi
