@@ -1,6 +1,7 @@
 #include "ctextencodingdetector.h"
 #include "trigramfrequencytables/ctrigramfrequencytable_english.h"
 #include "trigramfrequencytables/ctrigramfrequencytable_russian.h"
+#include "lang/type_traits_fast.hpp"
 #include "assert/advanced_assert.h"
 
 DISABLE_COMPILER_WARNINGS
@@ -12,7 +13,6 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
-#include <limits>
 #include <memory>
 #include <set>
 
@@ -36,7 +36,7 @@ inline float defaultMatchFunction(const CTextParser::OccurrenceTable& arg1, cons
 			n_gram1.second / (float) arg1.totalTrigramsCount;
 	}
 
-	return deviation > 1e-5f ? 1.0f / deviation - 1.0f : std::numeric_limits<float>::max();
+	return deviation > 1e-5f ? 1.0f / deviation - 1.0f : float_max;
 }
 
 template <typename T>
