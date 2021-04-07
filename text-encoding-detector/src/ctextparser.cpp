@@ -22,11 +22,11 @@ bool CTextParser::parse(QIODevice& textDevice, const QString& codecName)
 	return parse(textDevice.readAll(), codecName);
 }
 
-bool CTextParser::parse(QByteArray& textDevice, const QString& codecName)
+bool CTextParser::parse(const QByteArray& textData, const QString& codecName)
 {
 	assert_r(!codecName.isEmpty());
 
-	QTextStream stream(std::addressof(textDevice));
+	QTextStream stream(const_cast<QByteArray*>(std::addressof(textData)));
 	stream.setAutoDetectUnicode(false);
 	stream.setCodec(codecName.toUtf8().data());
 
@@ -57,7 +57,7 @@ bool CTextParser::parse(QByteArray& textDevice, const QString& codecName)
 
 	// Reading up to numCharactersToAnalyze characters, in numChunks x (numCharactersToAnalyze/numChunks) evenly spaced chunks
 
-	const qint64 stride = textDevice.size() <= numCharactersToAnalyze || numChunks == 0 ? 0 : (textDevice.size() - numCharactersToAnalyze) / (numChunks - 1);
+	const qint64 stride = textData.size() <= numCharactersToAnalyze || numChunks == 0 ? 0 : (textData.size() - numCharactersToAnalyze) / (numChunks - 1);
 	qint64 charactersCounter = 0;
 	while (!stream.atEnd())
 	{
@@ -65,7 +65,7 @@ bool CTextParser::parse(QByteArray& textDevice, const QString& codecName)
 		++charactersCounter;
 		if (charactersCounter > chunkSize)
 		{
-			//auto newPos = std::min(stream.pos() + stride, textDevice.size());
+			//auto newPos = std::min(stream.pos() + stride, textData.size());
 			if (stream.seek(stream.pos() + stride))
 			{
 				charactersCounter = 0;
