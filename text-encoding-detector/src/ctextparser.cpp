@@ -22,11 +22,11 @@ bool CTextParser::parse(QIODevice& textDevice, const QString& codecName)
 	return parse(textDevice.readAll(), codecName);
 }
 
-bool CTextParser::parse(const QByteArray& textData, const QString& codecName)
+bool CTextParser::parse(QByteArray textData, const QString& codecName)
 {
 	assert_r(!codecName.isEmpty());
 
-	QTextStream stream(const_cast<QByteArray*>(std::addressof(textData)));
+	QTextStream stream(std::addressof(textData));
 	stream.setAutoDetectUnicode(false);
 	stream.setCodec(codecName.toUtf8().data());
 
