@@ -2,8 +2,9 @@
 #include "assert/advanced_assert.h"
 
 DISABLE_COMPILER_WARNINGS
-#include <QTextStream>
 #include <QFile>
+#include <QTextCodec>
+#include <QTextStream>
 RESTORE_COMPILER_WARNINGS
 
 bool CTextParser::parse(const QString & textFilePath, const QString& codecName)
@@ -26,9 +27,10 @@ bool CTextParser::parse(QByteArray textData, const QString& codecName)
 {
 	assert_r(!codecName.isEmpty());
 
-	QTextStream stream(std::addressof(textData));
-	stream.setAutoDetectUnicode(false);
-	stream.setCodec(codecName.toUtf8().data());
+	QTextCodec* codec = QTextCodec::codecForName(codecName.toUtf8());
+	auto* decoder = codec->makeDecoder();
+	QString decodedText = decoder->toUnicode(textData);
+	QTextStream stream(&decodedText, QIODevice::ReadOnly);
 
 	// Read the first 3 symbols
 	QString currentTrigram;
