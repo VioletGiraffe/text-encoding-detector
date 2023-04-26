@@ -1,15 +1,18 @@
 #include "ctextencodingdetector.h"
 #include "trigramfrequencytables/ctrigramfrequencytable_english.h"
 #include "trigramfrequencytables/ctrigramfrequencytable_russian.h"
-#include "lang/type_traits_fast.hpp"
+
+#include "qtcore_helpers/qstring_helpers.hpp"
+
 #include "assert/advanced_assert.h"
+#include "lang/type_traits_fast.hpp"
 
 DISABLE_COMPILER_WARNINGS
-#include <QTextCodec>
-#include <QIODevice>
 #include <QDebug>
-#include <QFile>
 #include <QElapsedTimer>
+#include <QFile>
+#include <QIODevice>
+#include <QTextCodec>
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
@@ -30,19 +33,20 @@ inline float defaultMatchFunction(const CTextParser::OccurrenceTable& arg1, cons
 	float deviation = 0.0f;
 	for (auto& n_gram1: arg1.trigramOccurrenceTable)
 	{
-		auto n_gram2 = arg2.trigramOccurrenceTable.find(n_gram1.first);
+		const auto n_gram2 = arg2.trigramOccurrenceTable.find(n_gram1.first);
+		const float n_gram1Ratio = (float)n_gram1.second / (float)arg1.totalTrigramsCount;
 		deviation += n_gram2 != arg2.trigramOccurrenceTable.end() ?
-			fabs(n_gram1.second / (float) arg1.totalTrigramsCount - n_gram2->second / (float) arg2.totalTrigramsCount) :
-			n_gram1.second / (float) arg1.totalTrigramsCount;
+			fabs(n_gram1Ratio - (float)n_gram2->second / (float)arg2.totalTrigramsCount) :
+			n_gram1Ratio;
 	}
 
-	return deviation > 1e-5f ? 1.0f / deviation - 1.0f : float_max;
+	return deviation > 1e-5f ? (1.0f / deviation - 1.0f) : float_max;
 }
 
 template <typename T>
 std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInputDevice, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
-    QElapsedTimer start;
+	QElapsedTimer start;
 	start.start();
 	auto availableCodecs = QTextCodec::availableCodecs();
 	std::vector<CTextEncodingDetector::EncodingDetectionResult> match;
@@ -56,7 +60,7 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInpu
 
 	std::set<QTextCodec*> differentCodecs;
 	for (const auto& codecName: availableCodecs)
-		if (!QString(codecName).contains("utf-8", Qt::CaseInsensitive))
+		if (!QString(codecName).contains(QSL("utf-8"), Qt::CaseInsensitive))
 			differentCodecs.insert(QTextCodec::codecForName(codecName.data()));
 
 	for (auto& codec: differentCodecs)
@@ -84,7 +88,7 @@ CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QString &
 #ifdef _DEBUG
 	qInfo() << "Encoding detection result for" << textFilePath;
 	for (auto& match: detectionResult)
-		qInfo() << QString("%1, %2: %3").arg(match.language, match.encoding, QString::number((double)match.match));
+		qInfo() << QSL("%1, %2: %3").arg(match.language, match.encoding, QString::number((double)match.match));
 #endif
 
 	if (!detectionResult.empty() && detectionResult.front().match > plausibleMatchThreshold)
@@ -108,7 +112,7 @@ CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QByteArra
 #ifdef _DEBUG
 	qInfo() << "Encoding detection result:";
 	for (auto& match: detectionResult)
-		qInfo() << QString("%1, %2: %3").arg(match.language, match.encoding, QString::number((double)match.match));
+		qInfo() << QSL("%1, %2: %3").arg(match.language, match.encoding, QString::number((double)match.match));
 #endif
 
 	if (!detectionResult.empty() && detectionResult.front().match > plausibleMatchThreshold)
@@ -128,7 +132,7 @@ CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(QIODevice & tex
 #ifdef _DEBUG
 	qInfo() << "Encoding detection result:";
 	for (auto& match: detectionResult)
-		qInfo() << QString("%1, %2: %3").arg(match.language, match.encoding, QString::number((double)match.match));
+		qInfo() << QSL("%1, %2: %3").arg(match.language, match.encoding, QString::number((double)match.match));
 #endif
 
 	if (!detectionResult.empty() && detectionResult.front().match > plausibleMatchThreshold)

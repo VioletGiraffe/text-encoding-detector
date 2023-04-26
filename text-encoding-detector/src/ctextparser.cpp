@@ -23,7 +23,7 @@ bool CTextParser::parse(QIODevice& textDevice, const QString& codecName)
 	return parse(textDevice.readAll(), codecName);
 }
 
-bool CTextParser::parse(QByteArray textData, const QString& codecName)
+bool CTextParser::parse(const QByteArray& textData, const QString& codecName)
 {
 	assert_r(!codecName.isEmpty());
 
