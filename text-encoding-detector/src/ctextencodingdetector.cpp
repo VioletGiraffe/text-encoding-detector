@@ -31,7 +31,7 @@ inline float defaultMatchFunction(const CTextParser::OccurrenceTable& arg1, cons
 		return defaultMatchFunction(arg2, arg1); // Performance optimization: the outer loop must iterate the smaller of the two containers for better performance
 
 	float deviation = 0.0f;
-	for (auto& n_gram1: arg1.trigramOccurrenceTable)
+	for (const auto& n_gram1: arg1.trigramOccurrenceTable)
 	{
 		const auto n_gram2 = arg2.trigramOccurrenceTable.find(n_gram1.first);
 		const float n_gram1Ratio = (float)n_gram1.second / (float)arg1.totalTrigramsCount;
@@ -63,14 +63,14 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInpu
 		if (!QString(codecName).contains(QSL("utf-8"), Qt::CaseInsensitive))
 			differentCodecs.insert(QTextCodec::codecForName(codecName.data()));
 
-	for (auto& codec: differentCodecs)
+	for (const auto& codec: differentCodecs)
 	{
 		CTextParser parser;
 		if (!parser.parse(dataOrInputDevice, QString(codec->name())))
 			continue;
 
 		const auto& languageStatisticsTables = tablesForLanguages.empty() ? defaultTables : tablesForLanguages;
-		for (auto& table: languageStatisticsTables)
+		for (const auto& table: languageStatisticsTables)
 			match.emplace_back(CTextEncodingDetector::EncodingDetectionResult{ codec->name(), table->language(), defaultMatchFunction(table->trigramOccurrenceTable(), parser.parsingResult()) });
 	}
 
