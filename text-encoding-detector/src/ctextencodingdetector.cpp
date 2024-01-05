@@ -25,16 +25,20 @@ inline float defaultMatchFunction(const CTextParser::OccurrenceTable& arg1, cons
 {
 	if (arg1.trigramOccurrenceTable.empty() || arg2.trigramOccurrenceTable.empty())
 		return 0.0f;
-	else if (arg2.trigramOccurrenceTable.size() < arg1.trigramOccurrenceTable.size())
-		return defaultMatchFunction(arg2, arg1); // Performance optimization: the outer loop must iterate the smaller of the two containers for better performance
+
+	const auto& largerTable = arg1.trigramOccurrenceTable.size() > arg2.trigramOccurrenceTable.size() ? arg1: arg2;
+	const auto& smallerTable = arg1.trigramOccurrenceTable.size() <= arg2.trigramOccurrenceTable.size() ? arg1: arg2;
+
+	// Performance optimization: it's faster to make a smaller number of lookups into a larger hash map than vice versa.
 
 	float deviation = 0.0f;
-	for (const auto& n_gram1: arg1.trigramOccurrenceTable.asKeyValueRange())
+	for (const auto& n_gram1: smallerTable.trigramOccurrenceTable.asKeyValueRange())
 	{
-		const auto n_gram2 = arg2.trigramOccurrenceTable.find(n_gram1.first);
-		const float n_gram1Ratio = (float)n_gram1.second / (float)arg1.totalTrigramsCount;
-		deviation += n_gram2 != arg2.trigramOccurrenceTable.end() ?
-			fabs(n_gram1Ratio - (float)n_gram2.value() / (float)arg2.totalTrigramsCount) :
+		const float n_gram1Ratio = (float)n_gram1.second / (float)smallerTable.totalTrigramsCount;
+
+		const auto n_gram2 = largerTable.trigramOccurrenceTable.find(n_gram1.first);
+		deviation += n_gram2 != largerTable.trigramOccurrenceTable.end() ?
+			fabs(n_gram1Ratio - (float)n_gram2.value() / (float)largerTable.totalTrigramsCount) :
 			n_gram1Ratio;
 	}
 
@@ -59,8 +63,6 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInpu
 		if (!QString(codecName).contains(QSL("utf-8"), Qt::CaseInsensitive))
 			differentCodecs.insert(QTextCodec::codecForName(codecName.data()));
 	}
-
-
 
 	std::vector<CTextEncodingDetector::EncodingDetectionResult> match;
 	for (const auto& codec: differentCodecs)
