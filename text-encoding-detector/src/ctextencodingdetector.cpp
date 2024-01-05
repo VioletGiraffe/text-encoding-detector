@@ -8,8 +8,6 @@
 #include "lang/type_traits_fast.hpp"
 
 DISABLE_COMPILER_WARNINGS
-#include <QDebug>
-#include <QElapsedTimer>
 #include <QFile>
 #include <QIODevice>
 #include <QTextCodec>
@@ -21,7 +19,7 @@ RESTORE_COMPILER_WARNINGS
 
 #include <math.h>
 
-const float plausibleMatchThreshold = 0.1f;
+static constexpr float plausibleMatchThreshold = 0.1f;
 
 inline float defaultMatchFunction(const CTextParser::OccurrenceTable& arg1, const CTextParser::OccurrenceTable& arg2)
 {
@@ -31,12 +29,12 @@ inline float defaultMatchFunction(const CTextParser::OccurrenceTable& arg1, cons
 		return defaultMatchFunction(arg2, arg1); // Performance optimization: the outer loop must iterate the smaller of the two containers for better performance
 
 	float deviation = 0.0f;
-	for (const auto& n_gram1: arg1.trigramOccurrenceTable)
+	for (const auto& n_gram1: arg1.trigramOccurrenceTable.asKeyValueRange())
 	{
 		const auto n_gram2 = arg2.trigramOccurrenceTable.find(n_gram1.first);
 		const float n_gram1Ratio = (float)n_gram1.second / (float)arg1.totalTrigramsCount;
 		deviation += n_gram2 != arg2.trigramOccurrenceTable.end() ?
-			fabs(n_gram1Ratio - (float)n_gram2->second / (float)arg2.totalTrigramsCount) :
+			fabs(n_gram1Ratio - (float)n_gram2.value() / (float)arg2.totalTrigramsCount) :
 			n_gram1Ratio;
 	}
 
@@ -46,12 +44,9 @@ inline float defaultMatchFunction(const CTextParser::OccurrenceTable& arg1, cons
 template <typename T>
 std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInputDevice, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
-	QElapsedTimer start;
-	start.start();
-	auto availableCodecs = QTextCodec::availableCodecs();
-	std::vector<CTextEncodingDetector::EncodingDetectionResult> match;
+	const auto availableCodecs = QTextCodec::availableCodecs();
 
-	typename std::decay<decltype(tablesForLanguages)>::type defaultTables;
+	std::decay_t<decltype(tablesForLanguages)> defaultTables;
 	if (tablesForLanguages.empty())
 	{
 		defaultTables.emplace_back(std::make_unique<CTrigramFrequencyTable_English>());
@@ -59,10 +54,15 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInpu
 	}
 
 	std::set<QTextCodec*> differentCodecs;
-	for (const auto& codecName: availableCodecs)
+	for (const auto& codecName : availableCodecs)
+	{
 		if (!QString(codecName).contains(QSL("utf-8"), Qt::CaseInsensitive))
 			differentCodecs.insert(QTextCodec::codecForName(codecName.data()));
+	}
 
+
+
+	std::vector<CTextEncodingDetector::EncodingDetectionResult> match;
 	for (const auto& codec: differentCodecs)
 	{
 		CTextParser parser;
@@ -75,9 +75,6 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInpu
 	}
 
 	std::sort(match.begin(), match.end(), [](const CTextEncodingDetector::EncodingDetectionResult& l, const CTextEncodingDetector::EncodingDetectionResult& r){return l.match > r.match;});
-#ifdef _DEBUG
-	qInfo() << __FUNCTION__ << "Time taken:" << start.elapsed() << "ms";
-#endif
 	return match;
 }
 

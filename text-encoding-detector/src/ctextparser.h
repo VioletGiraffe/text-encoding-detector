@@ -3,10 +3,9 @@
 #include "compiler/compiler_warnings_control.h"
 
 DISABLE_COMPILER_WARNINGS
+#include <QHash>
 #include <QString>
 RESTORE_COMPILER_WARNINGS
-
-#include <map>
 
 class QByteArray;
 class QIODevice;
@@ -16,7 +15,7 @@ class CTextParser
 public:
 	struct OccurrenceTable
 	{
-		std::map<QString /*trigraph*/, quint64 /*count*/> trigramOccurrenceTable;
+		QHash<QString /*trigraph*/, quint64 /*count*/> trigramOccurrenceTable;
 		quint64 totalTrigramsCount = 0;
 	};
 
