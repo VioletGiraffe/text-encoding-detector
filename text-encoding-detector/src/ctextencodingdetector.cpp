@@ -83,13 +83,7 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInpu
 
 CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QString & textFilePath, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
-	auto detectionResult = detect(textFilePath, tablesForLanguages);
-#ifdef _DEBUG
-	qInfo() << "Encoding detection result for" << textFilePath;
-	for (auto& match: detectionResult)
-		qInfo() << QSL("%1, %2: %3").arg(match.language, match.encoding, QString::number((double)match.match));
-#endif
-
+	const auto detectionResult = detect(textFilePath, tablesForLanguages);
 	if (!detectionResult.empty() && detectionResult.front().match > plausibleMatchThreshold)
 	{
 		QTextCodec * codec = QTextCodec::codecForName(detectionResult.front().encoding.toUtf8().data());
@@ -107,13 +101,7 @@ CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QString &
 
 CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QByteArray & textData, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
-	auto detectionResult = detect(textData, tablesForLanguages);
-#ifdef _DEBUG
-	qInfo() << "Encoding detection result:";
-	for (auto& match: detectionResult)
-		qInfo() << QSL("%1, %2: %3").arg(match.language, match.encoding, QString::number((double)match.match));
-#endif
-
+	const auto detectionResult = detect(textData, tablesForLanguages);
 	if (!detectionResult.empty() && detectionResult.front().match > plausibleMatchThreshold)
 	{
 		QTextCodec * codec = QTextCodec::codecForName(detectionResult.front().encoding.toUtf8().data());
@@ -127,13 +115,7 @@ CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QByteArra
 
 CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(QIODevice & textDevice, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
-	auto detectionResult = detect(textDevice, tablesForLanguages);
-#ifdef _DEBUG
-	qInfo() << "Encoding detection result:";
-	for (auto& match: detectionResult)
-		qInfo() << QSL("%1, %2: %3").arg(match.language, match.encoding, QString::number((double)match.match));
-#endif
-
+	const auto detectionResult = detect(textDevice, tablesForLanguages);
 	if (!detectionResult.empty() && detectionResult.front().match > plausibleMatchThreshold)
 	{
 		QTextCodec * codec = QTextCodec::codecForName(detectionResult.front().encoding.toUtf8().data());
