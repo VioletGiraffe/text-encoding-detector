@@ -15,7 +15,7 @@ RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 #include <memory>
-#include <set>
+#include <unordered_set>
 
 #include <math.h>
 
@@ -57,7 +57,7 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInpu
 		defaultTables.emplace_back(std::make_unique<CTrigramFrequencyTable_Russian>());
 	}
 
-	std::set<QTextCodec*> differentCodecs;
+	std::unordered_set<QTextCodec*> differentCodecs;
 	for (const auto& codecName : availableCodecs)
 	{
 		if (!QString(codecName).contains(QSL("utf-8"), Qt::CaseInsensitive))
