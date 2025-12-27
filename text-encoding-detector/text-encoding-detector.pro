@@ -7,7 +7,9 @@ greaterThan(QT_MAJOR_VERSION, 5) {
 	QT += core5compat
 }
 
-CONFIG += strict_c++ c++2b
+CONFIG += strict_c++
+
+include(../../global.pri)
 
 mac* | linux* | freebsd{
 	CONFIG(release, debug|release):CONFIG *= Release optimize_full
@@ -20,18 +22,8 @@ contains(QT_ARCH, x86_64) {
 	ARCHITECTURE = x86
 }
 
-android {
-	Release:OUTPUT_DIR=android/release
-	Debug:OUTPUT_DIR=android/debug
-
-} else:ios {
-	Release:OUTPUT_DIR=ios/release
-	Debug:OUTPUT_DIR=ios/debug
-
-} else {
-	Release:OUTPUT_DIR=release/$${ARCHITECTURE}
-	Debug:OUTPUT_DIR=debug/$${ARCHITECTURE}
-}
+Release:OUTPUT_DIR=release/$${ARCHITECTURE}
+Debug:OUTPUT_DIR=debug/$${ARCHITECTURE}
 
 DESTDIR  = ../../bin/$${OUTPUT_DIR}
 OBJECTS_DIR = ../../build/$${OUTPUT_DIR}/$${TARGET}
