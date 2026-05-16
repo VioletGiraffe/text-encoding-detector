@@ -8,6 +8,7 @@
 #include "lang/type_traits_fast.hpp"
 
 DISABLE_COMPILER_WARNINGS
+#include <QDebug>
 #include <QFile>
 #include <QIODevice>
 #include <QTextCodec>
@@ -15,34 +16,92 @@ RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 #include <memory>
+#include <ranges>
 #include <unordered_set>
 
 #include <math.h>
 
-static constexpr float plausibleMatchThreshold = 0.1f;
+#include <algorithm>
+#include <cmath>
+#include <limits>
 
-inline float defaultMatchFunction(const CTextParser::OccurrenceTable& arg1, const CTextParser::OccurrenceTable& arg2)
+static constexpr double plausibleMatchThreshold = 20.0;
+
+[[nodiscard]] inline double logProbabilityScore(const CTextParser::OccurrenceTable& model, const CTextParser::OccurrenceTable& sample) noexcept
 {
-	if (arg1.trigramOccurrenceTable.empty() || arg2.trigramOccurrenceTable.empty())
-		return 0.0f;
+	static constexpr double Lmax = 15.0;
+	if (sample.totalTrigramsCount <= 5) // Too little data to draw conclusions
+		return 1e20;
 
-	const auto& largerTable = arg1.trigramOccurrenceTable.size() > arg2.trigramOccurrenceTable.size() ? arg1: arg2;
-	const auto& smallerTable = arg1.trigramOccurrenceTable.size() <= arg2.trigramOccurrenceTable.size() ? arg1: arg2;
+	double totalLoss = 0.0;
+	quint64 totalCount = 0;
 
-	// Performance optimization: it's faster to make a smaller number of lookups into a larger hash map than vice versa.
-
-	float deviation = 0.0f;
-	for (const auto& n_gram1: smallerTable.trigramOccurrenceTable.asKeyValueRange())
+	for (const auto& [trigram, stats] : sample.trigramOccurrenceTable)
 	{
-		const float n_gram1Ratio = (float)n_gram1.second / (float)smallerTable.totalTrigramsCount;
+		const quint64 count = stats.rawCount;
+		const auto it = model.trigramOccurrenceTable.find(trigram);
 
-		const auto n_gram2 = largerTable.trigramOccurrenceTable.find(n_gram1.first);
-		deviation += n_gram2 != largerTable.trigramOccurrenceTable.end() ?
-			fabs(n_gram1Ratio - (float)n_gram2.value() / (float)largerTable.totalTrigramsCount) :
-			n_gram1Ratio;
+		const double loss =
+			(it != model.trigramOccurrenceTable.end())
+			? std::min(static_cast<double>(it->second.loss), Lmax)
+			: Lmax;
+
+		totalLoss += static_cast<double>(count) * loss;
+		totalCount += count;
 	}
 
-	return deviation > 1e-5f ? (1.0f / deviation - 1.0f) : float_max;
+	if (totalCount == 0)
+		return 1e20; // arbitrary large number to represent no match
+
+	return totalLoss / static_cast<double>(totalCount);
+}
+
+[[nodiscard]] inline double cosineDistance(const CTextParser::OccurrenceTable& model, const CTextParser::OccurrenceTable& sample) noexcept
+{
+	const double unknownPenaltyWeight = 0.0; // Adjust this weight to control the penalty for unknown trigrams
+	if (model.trigramOccurrenceTable.empty() || sample.trigramOccurrenceTable.empty())
+		return 1.0 + unknownPenaltyWeight;
+
+	double dot = 0.0;
+	double modelNormSq = 0.0;
+	double sampleNormSq = 0.0;
+	double unknownCount = 0.0;
+	double sampleTotalCount = 0.0;
+
+	for (const auto& [trigram, sampleStats] : sample.trigramOccurrenceTable)
+	{
+		const double sampleCount = static_cast<double>(sampleStats.rawCount);
+		sampleNormSq += sampleCount * sampleCount;
+		sampleTotalCount += sampleCount;
+
+		const auto modelIt = model.trigramOccurrenceTable.find(trigram);
+		if (modelIt != model.trigramOccurrenceTable.end())
+		{
+			const double modelCount = static_cast<double>(modelIt->second.rawCount);
+			dot += sampleCount * modelCount;
+		}
+		else
+		{
+			unknownCount += sampleCount;
+		}
+	}
+
+	for (const auto& [_, modelStats] : model.trigramOccurrenceTable)
+	{
+		const double modelCount = static_cast<double>(modelStats.rawCount);
+		modelNormSq += modelCount * modelCount;
+	}
+
+	if (modelNormSq <= 0.0 || sampleNormSq <= 0.0 || sampleTotalCount <= 0.0)
+		return 1.0 + unknownPenaltyWeight;
+
+	const double similarity = dot / (std::sqrt(modelNormSq) * std::sqrt(sampleNormSq));
+	const double clampedSimilarity = std::clamp(similarity, 0.0, 1.0);
+
+	const double cosineDistance = 1.0 - clampedSimilarity;
+	const double unknownFraction = unknownCount / sampleTotalCount;
+
+	return cosineDistance + unknownPenaltyWeight * unknownFraction;
 }
 
 template <typename T>
@@ -60,23 +119,31 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInpu
 	std::unordered_set<QTextCodec*> differentCodecs;
 	for (const auto& codecName : availableCodecs)
 	{
-		if (!QString(codecName).contains(QSL("utf-8"), Qt::CaseInsensitive))
-			differentCodecs.insert(QTextCodec::codecForName(codecName.data()));
+		differentCodecs.insert(QTextCodec::codecForName(codecName.data()));
 	}
 
 	std::vector<CTextEncodingDetector::EncodingDetectionResult> match;
 	for (const auto& codec: differentCodecs)
 	{
 		CTextParser parser;
-		if (!parser.parse(dataOrInputDevice, QString(codec->name())))
+		if (!parser.parse(dataOrInputDevice, QString(codec->name()), false, false))
 			continue;
+
+		qInfo() << "Parsed text with codec" << codec->name() << "trigrams count:" << parser.parsingResult().totalTrigramsCount;
+		std::vector<std::pair<QString, quint64>> v;
+		for (const auto& [trigram, stats] : parser.parsingResult().trigramOccurrenceTable)
+			v.emplace_back(trigram.toString(), stats.rawCount);
+
+		std::ranges::sort(v, std::greater{}, &std::pair<QString, quint64>::second);
+		for (size_t i = 0; i < std::min<size_t>(100, v.size()); ++i)
+			qInfo() << v[i].first << v[i].second;
 
 		const auto& languageStatisticsTables = tablesForLanguages.empty() ? defaultTables : tablesForLanguages;
 		for (const auto& table: languageStatisticsTables)
-			match.emplace_back(CTextEncodingDetector::EncodingDetectionResult{ codec->name(), table->language(), defaultMatchFunction(table->trigramOccurrenceTable(), parser.parsingResult()) });
+			match.emplace_back(CTextEncodingDetector::EncodingDetectionResult{ codec->name(), table->language(), cosineDistance(table->trigramOccurrenceTable(), parser.parsingResult()) });
 	}
 
-	std::sort(match.begin(), match.end(), [](const CTextEncodingDetector::EncodingDetectionResult& l, const CTextEncodingDetector::EncodingDetectionResult& r){return l.match > r.match;});
+	std::ranges::sort(match, std::less{}, &CTextEncodingDetector::EncodingDetectionResult::score);
 	return match;
 }
 
@@ -84,7 +151,7 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInpu
 CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QString & textFilePath, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
 	const auto detectionResult = detect(textFilePath, tablesForLanguages);
-	if (!detectionResult.empty() && detectionResult.front().match > plausibleMatchThreshold)
+	if (!detectionResult.empty() && detectionResult.front().score < plausibleMatchThreshold)
 	{
 		QTextCodec * codec = QTextCodec::codecForName(detectionResult.front().encoding.toUtf8().data());
 		assert_r(codec);
@@ -102,7 +169,7 @@ CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QString &
 CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QByteArray & textData, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
 	const auto detectionResult = detect(textData, tablesForLanguages);
-	if (!detectionResult.empty() && detectionResult.front().match > plausibleMatchThreshold)
+	if (!detectionResult.empty() && detectionResult.front().score < plausibleMatchThreshold)
 	{
 		QTextCodec * codec = QTextCodec::codecForName(detectionResult.front().encoding.toUtf8().data());
 		assert_r(codec);
@@ -116,7 +183,7 @@ CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QByteArra
 CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(QIODevice & textDevice, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
 	const auto detectionResult = detect(textDevice, tablesForLanguages);
-	if (!detectionResult.empty() && detectionResult.front().match > plausibleMatchThreshold)
+	if (!detectionResult.empty() && detectionResult.front().score < plausibleMatchThreshold)
 	{
 		QTextCodec * codec = QTextCodec::codecForName(detectionResult.front().encoding.toUtf8().data());
 		assert_r(codec);

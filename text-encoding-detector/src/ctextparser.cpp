@@ -1,91 +1,93 @@
 #include "ctextparser.h"
-#include "assert/advanced_assert.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QFile>
 #include <QTextCodec>
-#include <QTextStream>
 RESTORE_COMPILER_WARNINGS
 
-bool CTextParser::parse(const QString & textFilePath, const QString& codecName)
+#include <assert.h>
+
+bool CTextParser::parse(const QString & textFilePath, const QString& codecName, bool fastAnalysis, bool ignoreNonLetters)
 {
 	QFile file(textFilePath);
-	if (!file.exists())
+	if (!file.open(QFile::ReadOnly))
 		return false;
 
 	// TODO: avoid reading the whole file. Currently (as of Qt 5.13.2) not easily doable due to bugs in QBuffer (seek(), bytesAvailable() behave in a weird way).
-	return parse(file.readAll(), codecName);
+	return parse(file.readAll(), codecName, fastAnalysis, ignoreNonLetters);
 }
 
-bool CTextParser::parse(QIODevice& textDevice, const QString& codecName)
+bool CTextParser::parse(QIODevice& textDevice, const QString& codecName, const bool fastAnalysis, const bool ignoreNonLetters)
 {
 	// TODO: avoid reading the whole file. Currently (as of Qt 5.13.2) not easily doable due to bugs in QBuffer (seek(), bytesAvailable() behave in a weird way).
-	return parse(textDevice.readAll(), codecName);
+	return parse(textDevice.readAll(), codecName, fastAnalysis, ignoreNonLetters);
 }
 
-bool CTextParser::parse(const QByteArray& textData, const QString& codecName)
+bool CTextParser::parse(const QByteArray& textData, const QString& codecName, const bool /*fastAnalysis*/, const bool ignoreNonLetters)
 {
-	assert_r(!codecName.isEmpty());
+	assert(!codecName.isEmpty());
 
 	QTextCodec* codec = QTextCodec::codecForName(codecName.toUtf8());
+	if (!codec)
+	{
+		assert(codec);
+		return false;
+	}
+
 	auto* decoder = codec->makeDecoder();
-	QString decodedText = decoder->toUnicode(textData);
-	QTextStream stream(&decodedText, QIODevice::ReadOnly);
+	const QString decodedText = decoder->toUnicode(textData);
 
-	// Read the first 3 symbols
-	QString currentTrigram;
-	QChar ch;
-	for (int i = 0; i < 3;)
+	// Scan the text and count every trigram, ignoring non-letter characters
+	QString trigramString;
+	qsizetype i = 0;
+	const qsizetype textSize = decodedText.size();
+	// Accumulate the first 3 letters
+	for (i = 0; i < textSize; ++i)
 	{
-		if (stream.atEnd())
-			return false;
+		const QChar c = decodedText[i];
+		bool ignore = false;
+		if (ignoreNonLetters)
+			ignore = !c.isLetter();
+		else
+			ignore = c.isPunct();
 
-		stream >> ch;
-		if (ch.isLetter())
+		if (ignore)
 		{
-			ch = ch.toLower();
-			currentTrigram.append(ch);
-			++i;
+			trigramString += c.toLower();
+			if (trigramString.size() == 3)
+				break;
 		}
 	}
 
-	assert_r(currentTrigram.length() == 3);
-	++_parsingResult.trigramOccurrenceTable[currentTrigram];
-	++_parsingResult.totalTrigramsCount;
+	if (trigramString.size() < 3) [[unlikely]]
+		return false;
 
-	const qint64 numCharactersToAnalyze = 10000;
-	const qint64 numChunks = 10, chunkSize = numCharactersToAnalyze / numChunks;
-	static_assert(numCharactersToAnalyze > 0 && numChunks > 0, "Number of characters and number of chunks must be greater than 0");
+	
+	const QChar* textChars = decodedText.data();
 
-	// Reading up to numCharactersToAnalyze characters, in numChunks x (numCharactersToAnalyze/numChunks) evenly spaced chunks
+	OccurrenceTable::Trigram trigram{ trigramString[0], trigramString[1], trigramString[2] };
 
-	const qint64 stride = textData.size() <= numCharactersToAnalyze || numChunks == 0 ? 0 : (textData.size() - numCharactersToAnalyze) / (numChunks - 1);
-	qint64 charactersCounter = 0;
-	while (!stream.atEnd())
+	quint64 trigramsCount = 0;
+	_parsingResult.trigramOccurrenceTable[trigram].rawCount += 1;
+	++trigramsCount;
+
+	for (; i < textSize; ++i)
 	{
-		stream >> ch;
-		++charactersCounter;
-		if (charactersCounter > chunkSize)
+		const QChar c = textChars[i];
+		if (c.isLetter())
 		{
-			//auto newPos = std::min(stream.pos() + stride, textData.size());
-			if (stream.seek(stream.pos() + stride))
-			{
-				charactersCounter = 0;
-				continue;
-			}
-			else
-				break; // seek fails when we're trying to move past the end, which is our cue to stop
+			trigram.chars[0] = trigram.chars[1];
+			trigram.chars[1] = trigram.chars[2];
+			trigram.chars[2] = c.toLower();
+
+			_parsingResult.trigramOccurrenceTable[trigram].rawCount += 1;
+			++trigramsCount;
 		}
-
-		currentTrigram.remove(0, 1);
-		currentTrigram.append(ch.toLower());
-
-
-		++_parsingResult.trigramOccurrenceTable[currentTrigram];
-		++_parsingResult.totalTrigramsCount;
 	}
 
-	return true;
+	_parsingResult.totalTrigramsCount += trigramsCount;
+
+	return trigramsCount > 10;
 }
 
 void CTextParser::clear()
@@ -93,6 +95,16 @@ void CTextParser::clear()
 	_parsingResult.trigramOccurrenceTable.clear();
 	_parsingResult.totalTrigramsCount = 0;
 }
+
+void CTextParser::calculateLoss() noexcept
+{
+	for (auto& pair : _parsingResult.trigramOccurrenceTable)
+	{
+		auto& stats = pair.second;
+		stats.loss = -logf((float)stats.rawCount / (float)_parsingResult.totalTrigramsCount);
+	}
+}
+
 
 const CTextParser::OccurrenceTable & CTextParser::parsingResult() const
 {

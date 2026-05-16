@@ -34,7 +34,8 @@ RCC_DIR     = ../../build/$${OUTPUT_DIR}/$${TARGET}
 INCLUDEPATH += \
 	../../qtutils \
 	../../cpputils \
-	../../cpp-template-utils
+	../../cpp-template-utils \
+	../../cpp-template-utils/3rdparty
 
 win*{
 	QMAKE_CXXFLAGS += /MP /Zi /JMC

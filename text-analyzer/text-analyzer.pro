@@ -1,20 +1,14 @@
 DESTDIR  = bin
 TARGET = text_analyzer
 TEMPLATE = app
-CONFIG += staticlib c++11 console
+CONFIG += staticlib c++2b console
 
-QT = core
+QT = core core5compat
 
 OBJECTS_DIR = build
 MOC_DIR     = build
 UI_DIR      = build
 RCC_DIR     = build
-
-win*{
-	QMAKE_CXXFLAGS += /MP
-	DEFINES += WIN32_LEAN_AND_MEAN NOMINMAX
-	QMAKE_CXXFLAGS_WARN_ON = -W4
-}
 
 linux*|mac*|freebsd{
 	QMAKE_CXXFLAGS += -pedantic-errors
@@ -22,14 +16,23 @@ linux*|mac*|freebsd{
 	QMAKE_CXXFLAGS_WARN_ON = -Wall -Wno-c++11-extensions -Wno-local-type-template-args -Wno-deprecated-register
 }
 
-win32*:!*msvc2012:*msvc*:!*msvc2010:*msvc* {
-	QMAKE_CXXFLAGS += /FS
+win* {
+	QMAKE_CXXFLAGS += /MP /Zi /wd4251 /JMC /FS
+	QMAKE_CXXFLAGS += /std:c++latest /permissive- /Zc:__cplusplus
+	QMAKE_LFLAGS += /DEBUG:FASTLINK
+
+	DEFINES += WIN32_LEAN_AND_MEAN NOMINMAX
+	QMAKE_CXXFLAGS_WARN_ON = -W4
 }
 
 INCLUDEPATH += \
 	../text-encoding-detector/src/ \
-	../../cpputils
+	../../cpputils \
+	../../cpp-template-utils \
+	../../cpp-template-utils/3rdparty
 
-LIBS += -L../../bin -ltext_encoding_detector
+SOURCES += src/main.cpp \
+	../text-encoding-detector/src/ctextparser.cpp
 
-SOURCES += src/main.cpp
+HEADERS += \
+	../text-encoding-detector/src/ctextparser.h

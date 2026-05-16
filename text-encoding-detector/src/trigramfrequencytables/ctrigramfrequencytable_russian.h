@@ -5,7 +5,7 @@
 class CTrigramFrequencyTable_Russian final : public CTrigramFrequencyTable_Base
 {
 public:
-	CTrigramFrequencyTable_Russian();
+	CTrigramFrequencyTable_Russian() noexcept;
 
-	[[nodiscard]] inline QString language() const override {return QStringLiteral("Russian");}
+	[[nodiscard]] inline QString language() const override { return "Russian"; }
 };

@@ -2,10 +2,10 @@
 
 #include "ctrigramfrequencytable_base.h"
 
-class CTrigramFrequencyTable_English final : public CTrigramFrequencyTable_Base
+class CTrigramFrequencyTable_English : public CTrigramFrequencyTable_Base
 {
 public:
-	CTrigramFrequencyTable_English();
+	CTrigramFrequencyTable_English() noexcept;
 
-	[[nodiscard]] inline QString language() const override {return QStringLiteral("English");}
+	[[nodiscard]] inline QString language() const override { return "English"; }
 };

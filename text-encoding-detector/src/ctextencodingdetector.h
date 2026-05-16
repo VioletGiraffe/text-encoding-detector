@@ -22,7 +22,7 @@ public:
 	struct EncodingDetectionResult {
 		QString encoding;
 		QString language;
-		float match; // 0.0 to 1.0
+		double score; // Lower is better, 0.0 means perfect match
 	};
 
 	[[nodiscard]] static DecodedText
@@ -33,7 +33,7 @@ public:
 	decode(QIODevice& textDevice, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages = std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>());
 
 
-	// The results are sorted by match from high to low
+	// The results are sorted by score from high to low
 	[[nodiscard]] static std::vector<EncodingDetectionResult>
 	detect(const QString& textFilePath, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages = std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>());
 
