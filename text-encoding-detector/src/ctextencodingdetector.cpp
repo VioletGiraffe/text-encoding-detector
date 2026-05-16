@@ -103,6 +103,12 @@ static constexpr double plausibleMatchThreshold = 20.0;
 	return cosineDistance + unknownPenaltyWeight * unknownFraction;
 }
 
+template <typename Container, typename Value>
+inline bool contains(const Container& container, const Value& value)
+{
+	return std::ranges::find(container, value) != container.end();
+}
+
 CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QByteArray & textData, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
 	const auto detectionResult = detect(textData, tablesForLanguages);
@@ -146,17 +152,17 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetecto
 	for (const char* encodingName : encodingsShortlist)
 	{
 		QTextCodec* codec = QTextCodec::codecForName(encodingName);
-		if (codec && !std::ranges::contains(codecs, codec))
+		if (codec && !contains(codecs, codec))
 			codecs.push_back(codec);
 	}
 
-	if (auto* localeCodec = QTextCodec::codecForLocale(); localeCodec && !std::ranges::contains(codecs, localeCodec))
+	if (auto* localeCodec = QTextCodec::codecForLocale(); localeCodec && !contains(codecs, localeCodec))
 		codecs.push_back(localeCodec);
 
 	// Try UTF detection first
 	if (auto* utfCodec = QTextCodec::codecForUtfText(textData, nullptr); utfCodec)
 	{
-		if (!std::ranges::contains(codecs, utfCodec))
+		if (!contains(codecs, utfCodec))
 			codecs.push_back(utfCodec);
 	}
 
@@ -175,7 +181,7 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetecto
 
 		// Skip duplicate codecs that produce the same decoded text
 		const auto hash = ::wheathash64(decodedText.constData(), decodedText.size() * sizeof(QChar));
-		if (std::ranges::contains(hashes, hash))
+		if (contains(hashes, hash))
 			continue;
 
 		hashes.push_back(hash);
