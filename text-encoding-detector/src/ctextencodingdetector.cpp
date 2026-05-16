@@ -142,8 +142,6 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetecto
 
 	std::vector<QTextCodec*> codecs;
 	codecs.reserve(encodingsShortlist.size() + 2);
-	if (auto* localeCodec = QTextCodec::codecForLocale(); localeCodec)
-		codecs.push_back(localeCodec);
 
 	for (const char* encodingName : encodingsShortlist)
 	{
@@ -151,6 +149,9 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetecto
 		if (codec && !std::ranges::contains(codecs, codec))
 			codecs.push_back(codec);
 	}
+
+	if (auto* localeCodec = QTextCodec::codecForLocale(); localeCodec && !std::ranges::contains(codecs, localeCodec))
+		codecs.push_back(localeCodec);
 
 	// Try UTF detection first
 	if (auto* utfCodec = QTextCodec::codecForUtfText(textData, nullptr); utfCodec)
