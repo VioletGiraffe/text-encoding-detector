@@ -8,7 +8,6 @@
 #include "lang/type_traits_fast.hpp"
 
 DISABLE_COMPILER_WARNINGS
-#include <QDebug>
 #include <QFile>
 #include <QIODevice>
 #include <QTextCodec>
@@ -128,15 +127,6 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInpu
 		CTextParser parser;
 		if (!parser.parse(dataOrInputDevice, QString(codec->name()), false, false))
 			continue;
-
-		qInfo() << "Parsed text with codec" << codec->name() << "trigrams count:" << parser.parsingResult().totalTrigramsCount;
-		std::vector<std::pair<QString, quint64>> v;
-		for (const auto& [trigram, stats] : parser.parsingResult().trigramOccurrenceTable)
-			v.emplace_back(trigram.toString(), stats.rawCount);
-
-		std::ranges::sort(v, std::greater{}, &std::pair<QString, quint64>::second);
-		for (size_t i = 0; i < std::min<size_t>(100, v.size()); ++i)
-			qInfo() << v[i].first << v[i].second;
 
 		const auto& languageStatisticsTables = tablesForLanguages.empty() ? defaultTables : tablesForLanguages;
 		for (const auto& table: languageStatisticsTables)
