@@ -5,46 +5,16 @@ DISABLE_COMPILER_WARNINGS
 #include <QTextCodec>
 RESTORE_COMPILER_WARNINGS
 
-#include <assert.h>
-
-bool CTextParser::parse(const QString & textFilePath, const QString& codecName, bool fastAnalysis, bool ignoreNonLetters)
+bool CTextParser::parse(const QString& text, const bool /*fastAnalysis*/, const bool ignoreNonLetters)
 {
-	QFile file(textFilePath);
-	if (!file.open(QFile::ReadOnly))
-		return false;
-
-	// TODO: avoid reading the whole file. Currently (as of Qt 5.13.2) not easily doable due to bugs in QBuffer (seek(), bytesAvailable() behave in a weird way).
-	return parse(file.readAll(), codecName, fastAnalysis, ignoreNonLetters);
-}
-
-bool CTextParser::parse(QIODevice& textDevice, const QString& codecName, const bool fastAnalysis, const bool ignoreNonLetters)
-{
-	// TODO: avoid reading the whole file. Currently (as of Qt 5.13.2) not easily doable due to bugs in QBuffer (seek(), bytesAvailable() behave in a weird way).
-	return parse(textDevice.readAll(), codecName, fastAnalysis, ignoreNonLetters);
-}
-
-bool CTextParser::parse(const QByteArray& textData, const QString& codecName, const bool /*fastAnalysis*/, const bool ignoreNonLetters)
-{
-	assert(!codecName.isEmpty());
-
-	QTextCodec* codec = QTextCodec::codecForName(codecName.toUtf8());
-	if (!codec)
-	{
-		assert(codec);
-		return false;
-	}
-
-	auto* decoder = codec->makeDecoder();
-	const QString decodedText = decoder->toUnicode(textData);
-
 	// Scan the text and count every trigram, ignoring non-letter characters
 	QString trigramString;
 	qsizetype i = 0;
-	const qsizetype textSize = decodedText.size();
+	const qsizetype textSize = text.size();
 	// Accumulate the first 3 letters
 	for (i = 0; i < textSize; ++i)
 	{
-		const QChar c = decodedText[i];
+		const QChar c = text[i];
 		bool ignore = false;
 		if (ignoreNonLetters)
 			ignore = !c.isLetter();
@@ -62,8 +32,7 @@ bool CTextParser::parse(const QByteArray& textData, const QString& codecName, co
 	if (trigramString.size() < 3) [[unlikely]]
 		return false;
 
-	
-	const QChar* textChars = decodedText.data();
+	const QChar* textChars = text.constData();
 
 	OccurrenceTable::Trigram trigram{ trigramString[0], trigramString[1], trigramString[2] };
 

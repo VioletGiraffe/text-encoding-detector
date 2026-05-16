@@ -48,9 +48,7 @@ public:
 	};
 
 	// Subsequent calls to parse() will not reset the frequency table
-	bool parse(const QString& textFilePath, const QString& codecName, bool fastAnalysis = false, bool ignoreNonLetters = false);
-	bool parse(QIODevice& textDevice, const QString& codecName, bool fastAnalysis = false, bool ignoreNonLetters = false);
-	bool parse(const QByteArray& textData, const QString& codecName, bool fastAnalysis = false, bool ignoreNonLetters = false);
+	bool parse(const QString& text, bool fastAnalysis = false, bool ignoreNonLetters = false);
 
 	// This method clears the table and sets counters to 0
 	void clear();

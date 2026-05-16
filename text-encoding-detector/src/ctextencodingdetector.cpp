@@ -8,21 +8,21 @@
 #include "lang/type_traits_fast.hpp"
 
 DISABLE_COMPILER_WARNINGS
+#include <QDebug>
 #include <QFile>
 #include <QIODevice>
 #include <QTextCodec>
 RESTORE_COMPILER_WARNINGS
 
+#include <array>
 #include <algorithm>
 #include <memory>
 #include <ranges>
-#include <unordered_set>
 
 #include <math.h>
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
 
 static constexpr double plausibleMatchThreshold = 20.0;
 
@@ -103,59 +103,6 @@ static constexpr double plausibleMatchThreshold = 20.0;
 	return cosineDistance + unknownPenaltyWeight * unknownFraction;
 }
 
-template <typename T>
-std::vector<CTextEncodingDetector::EncodingDetectionResult> detect(T& dataOrInputDevice, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
-{
-	const auto availableCodecs = QTextCodec::availableCodecs();
-
-	std::decay_t<decltype(tablesForLanguages)> defaultTables;
-	if (tablesForLanguages.empty())
-	{
-		defaultTables.emplace_back(std::make_unique<CTrigramFrequencyTable_English>());
-		defaultTables.emplace_back(std::make_unique<CTrigramFrequencyTable_Russian>());
-	}
-
-	std::unordered_set<QTextCodec*> differentCodecs;
-	for (const auto& codecName : availableCodecs)
-	{
-		differentCodecs.insert(QTextCodec::codecForName(codecName.data()));
-	}
-
-	std::vector<CTextEncodingDetector::EncodingDetectionResult> match;
-	for (const auto& codec: differentCodecs)
-	{
-		CTextParser parser;
-		if (!parser.parse(dataOrInputDevice, QString(codec->name()), false, false))
-			continue;
-
-		const auto& languageStatisticsTables = tablesForLanguages.empty() ? defaultTables : tablesForLanguages;
-		for (const auto& table: languageStatisticsTables)
-			match.emplace_back(CTextEncodingDetector::EncodingDetectionResult{ codec->name(), table->language(), cosineDistance(table->trigramOccurrenceTable(), parser.parsingResult()) });
-	}
-
-	std::ranges::sort(match, std::less{}, &CTextEncodingDetector::EncodingDetectionResult::score);
-	return match;
-}
-
-
-CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QString & textFilePath, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
-{
-	const auto detectionResult = detect(textFilePath, tablesForLanguages);
-	if (!detectionResult.empty() && detectionResult.front().score < plausibleMatchThreshold)
-	{
-		QTextCodec * codec = QTextCodec::codecForName(detectionResult.front().encoding.toUtf8().data());
-		assert_r(codec);
-		if (codec)
-		{
-			QFile file(textFilePath);
-			file.open(QIODevice::ReadOnly);
-			return DecodedText{codec->toUnicode(file.readAll()), detectionResult.front().encoding, detectionResult.front().language};
-		}
-	}
-
-	return DecodedText();
-}
-
 CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QByteArray & textData, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
 	const auto detectionResult = detect(textData, tablesForLanguages);
@@ -170,31 +117,74 @@ CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QByteArra
 	return DecodedText();
 }
 
-CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(QIODevice & textDevice, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
-{
-	const auto detectionResult = detect(textDevice, tablesForLanguages);
-	if (!detectionResult.empty() && detectionResult.front().score < plausibleMatchThreshold)
-	{
-		QTextCodec * codec = QTextCodec::codecForName(detectionResult.front().encoding.toUtf8().data());
-		assert_r(codec);
-		if (codec)
-			return DecodedText{codec->toUnicode(textDevice.readAll()), detectionResult.front().encoding, detectionResult.front().language};
-	}
-
-	return DecodedText();
-}
-
-std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetector::detect(const QString & textFilePath, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
-{
-	return ::detect(textFilePath, tablesForLanguages);
-}
-
 std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetector::detect(const QByteArray & textData, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
-	return ::detect(textData, tablesForLanguages);
-}
+	std::decay_t<decltype(tablesForLanguages)> defaultTables;
+	if (tablesForLanguages.empty())
+	{
+		defaultTables.push_back(std::make_unique<CTrigramFrequencyTable_English>());
+		defaultTables.push_back(std::make_unique<CTrigramFrequencyTable_Russian>());
+	}
 
-std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetector::detect(QIODevice & textDevice, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
-{
-	return ::detect(textDevice, tablesForLanguages);
+	std::array encodingsShortlist {
+		"Windows-1251",
+		"KOI8-R",
+		"KOI8-U",
+		"CP866",
+		"ISO-8859-1",
+		"ISO-8859-2",
+		"UTF-16LE",
+		"UTF-16BE",
+		"UTF-32LE",
+		"UTF-32BE",
+		"UTF-8",
+	};
+
+	std::vector<QTextCodec*> codecs;
+	if (auto* localeCodec = QTextCodec::codecForLocale(); localeCodec)
+		codecs.push_back(localeCodec);
+
+	for (const char* encodingName : encodingsShortlist)
+	{
+		QTextCodec* codec = QTextCodec::codecForName(encodingName);
+		if (codec && !std::ranges::contains(codecs, codec))
+			codecs.push_back(codec);
+	}
+
+	std::vector<uint64_t> hashes;
+	std::vector<CTextEncodingDetector::EncodingDetectionResult> match;
+
+	// Try UTF detection first
+	if (auto* utfCodec = QTextCodec::codecForUtfText(textData, nullptr); utfCodec)
+	{
+		if (!std::ranges::contains(codecs, utfCodec))
+			codecs.push_back(utfCodec);
+	}
+
+	for (const auto& codec : codecs)
+	{
+		auto* decoder = codec->makeDecoder();
+		const QString decodedText = decoder->toUnicode(textData);
+
+		// Skip duplicate codecs that produce the same decoded text
+		const auto hash = ::wheathash64(decodedText.constData(), decodedText.size() * sizeof(QChar));
+		if (std::ranges::contains(hashes, hash))
+			continue;
+
+		hashes.push_back(hash);
+
+		CTextParser parser;
+		if (!parser.parse(decodedText, false, false))
+			continue;
+
+		const auto& languageStatisticsTables = tablesForLanguages.empty() ? defaultTables : tablesForLanguages;
+		for (const auto& table : languageStatisticsTables)
+		{
+			const double distanceScore = cosineDistance(table->trigramOccurrenceTable(), parser.parsingResult());
+			match.emplace_back(CTextEncodingDetector::EncodingDetectionResult{ codec->name(), table->language(), distanceScore });
+		}
+	}
+
+	std::ranges::sort(match, std::less{}, &CTextEncodingDetector::EncodingDetectionResult::score);
+	return match;
 }
