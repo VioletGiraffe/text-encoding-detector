@@ -7,7 +7,7 @@ greaterThan(QT_MAJOR_VERSION, 5) {
 	QT += core5compat
 }
 
-CONFIG += strict_c++
+CONFIG += strict_c++ c++2b
 
 include(../../global.pri)
 
