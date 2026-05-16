@@ -141,6 +141,7 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetecto
 	};
 
 	std::vector<QTextCodec*> codecs;
+	codecs.reserve(encodingsShortlist.size() + 2);
 	if (auto* localeCodec = QTextCodec::codecForLocale(); localeCodec)
 		codecs.push_back(localeCodec);
 
@@ -151,15 +152,20 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetecto
 			codecs.push_back(codec);
 	}
 
-	std::vector<uint64_t> hashes;
-	std::vector<CTextEncodingDetector::EncodingDetectionResult> match;
-
 	// Try UTF detection first
 	if (auto* utfCodec = QTextCodec::codecForUtfText(textData, nullptr); utfCodec)
 	{
 		if (!std::ranges::contains(codecs, utfCodec))
 			codecs.push_back(utfCodec);
 	}
+
+	const auto& languageStatisticsTables = tablesForLanguages.empty() ? defaultTables : tablesForLanguages;
+
+	std::vector<uint64_t> hashes;
+	hashes.reserve(codecs.size());
+
+	std::vector<CTextEncodingDetector::EncodingDetectionResult> match;
+	match.reserve(codecs.size() * languageStatisticsTables.size());
 
 	for (const auto& codec : codecs)
 	{
@@ -177,7 +183,6 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetecto
 		if (!parser.parse(decodedText, false, false))
 			continue;
 
-		const auto& languageStatisticsTables = tablesForLanguages.empty() ? defaultTables : tablesForLanguages;
 		for (const auto& table : languageStatisticsTables)
 		{
 			const double distanceScore = cosineDistance(table->trigramOccurrenceTable(), parser.parsingResult());
