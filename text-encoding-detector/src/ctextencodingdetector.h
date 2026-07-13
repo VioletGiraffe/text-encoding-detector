@@ -9,6 +9,8 @@ class CTrigramFrequencyTable_Base;
 class QIODevice;
 class QByteArray;
 
+[[nodiscard]] bool isUtf8(const QByteArray& data);
+
 class CTextEncodingDetector
 {
 public:
@@ -27,6 +29,8 @@ public:
 
 	[[nodiscard]] static DecodedText
 	decode(const QByteArray& textData, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages = std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>());
+
+	[[nodiscard]] static DecodedText decodeUtfBom(const QByteArray& textData);
 
 	// The results are sorted by score from best to worst
 	[[nodiscard]] static std::vector<EncodingDetectionResult>

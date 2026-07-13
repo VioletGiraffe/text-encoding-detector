@@ -16,15 +16,27 @@ RESTORE_COMPILER_WARNINGS
 
 #include <array>
 #include <algorithm>
+#include <string.h> // memcmp
 #include <memory>
 #include <ranges>
 
 #include <math.h>
 
-#include <algorithm>
 #include <cmath>
 
-static constexpr double plausibleMatchThreshold = 20.0;
+// cosineDistance(): 0.0 is best, 1.0 means no useful trigram overlap.
+static constexpr double plausibleMatchThreshold = 0.95;
+
+[[nodiscard]] inline bool startsWithBytes(const QByteArray& data, const char* bytes, int bytesSize) noexcept
+{
+	return data.size() >= bytesSize && ::memcmp(data.constData(), bytes, bytesSize) == 0;
+}
+
+bool isUtf8(const QByteArray& data)
+{
+	const QString text = QString::fromUtf8(data);
+	return text.toUtf8() == data;
+}
 
 [[nodiscard]] inline double logProbabilityScore(const CTextParser::OccurrenceTable& model, const CTextParser::OccurrenceTable& sample) noexcept
 {
@@ -111,6 +123,12 @@ inline bool contains(const Container& container, const Value& value)
 
 CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QByteArray & textData, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
+	if (auto decodedText = decodeUtfBom(textData); !decodedText.encoding.isEmpty())
+		return decodedText;
+
+	if (isUtf8(textData))
+		return DecodedText{QString::fromUtf8(textData), "UTF-8", {}};
+
 	const auto detectionResult = detect(textData, tablesForLanguages);
 	if (!detectionResult.empty() && detectionResult.front().score < plausibleMatchThreshold)
 	{
@@ -121,6 +139,43 @@ CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QByteArra
 	}
 
 	return DecodedText();
+}
+
+CTextEncodingDetector::DecodedText CTextEncodingDetector::decodeUtfBom(const QByteArray& textData)
+{
+	struct BomEncoding
+	{
+		const char* bytes;
+		int bytesSize;
+		const char* encoding;
+	};
+
+	static constexpr std::array bomEncodings {
+		BomEncoding{ "\xFF\xFE\x00\x00", 4, "UTF-32LE" },
+		BomEncoding{ "\x00\x00\xFE\xFF", 4, "UTF-32BE" },
+		BomEncoding{ "\xEF\xBB\xBF", 3, "UTF-8" },
+		BomEncoding{ "\xFF\xFE", 2, "UTF-16LE" },
+		BomEncoding{ "\xFE\xFF", 2, "UTF-16BE" },
+	};
+
+	for (const auto& bomEncoding : bomEncodings)
+	{
+		if (!startsWithBytes(textData, bomEncoding.bytes, bomEncoding.bytesSize))
+			continue;
+
+		QTextCodec* codec = QTextCodec::codecForName(bomEncoding.encoding);
+		assert_r(codec);
+		if (!codec)
+			return {};
+
+		return DecodedText{
+			codec->toUnicode(textData.constData() + bomEncoding.bytesSize, static_cast<int>(textData.size() - bomEncoding.bytesSize)),
+			bomEncoding.encoding,
+			{}
+		};
+	}
+
+	return {};
 }
 
 std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetector::detect(const QByteArray & textData, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
@@ -159,7 +214,6 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetecto
 	if (auto* localeCodec = QTextCodec::codecForLocale(); localeCodec && !contains(codecs, localeCodec))
 		codecs.push_back(localeCodec);
 
-	// Try UTF detection first
 	if (auto* utfCodec = QTextCodec::codecForUtfText(textData, nullptr); utfCodec)
 	{
 		if (!contains(codecs, utfCodec))
