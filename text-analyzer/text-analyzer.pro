@@ -17,7 +17,8 @@ linux*|mac*|freebsd{
 }
 
 win* {
-	QMAKE_CXXFLAGS += /MP /Zi /wd4251 /JMC /FS
+	QMAKE_CXXFLAGS += /MP /Zi /wd4251 /FS
+	Debug:QMAKE_CXXFLAGS += /JMC
 	QMAKE_CXXFLAGS += /std:c++latest /permissive- /Zc:__cplusplus
 	QMAKE_LFLAGS += /DEBUG:FASTLINK
 
