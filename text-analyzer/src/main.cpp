@@ -7,7 +7,6 @@ DISABLE_COMPILER_WARNINGS
 #include <QTextStream>
 RESTORE_COMPILER_WARNINGS
 
-#include <assert.h>
 #include <algorithm>
 #include <iostream>
 #include <utility>
@@ -32,14 +31,13 @@ namespace {
 struct Trigram {
 	const char* trigram;
 	quint64 rawCount = 0;
-	float loss = 0.0f;
 };
 
 CTextParser::OccurrenceTable buildTable()
 {
 	static const Trigram trigrams[] = {
 %3
-		{nullptr, 0, 0.0f},
+		{nullptr, 0},
 	};
 
 	CTextParser::OccurrenceTable table;
@@ -51,7 +49,7 @@ CTextParser::OccurrenceTable buildTable()
 		const QString trigramString = QString::fromUtf8(trigrams[i].trigram);
 		table.trigramOccurrenceTable.try_emplace(
 			CTextParser::OccurrenceTable::Trigram{ trigramString[0], trigramString[1], trigramString[2] },
-			CTextParser::OccurrenceTable::Stats{ trigrams[i].rawCount, trigrams[i].loss }
+			CTextParser::OccurrenceTable::Stats{ trigrams[i].rawCount }
 		);
 		totalCount += trigrams[i].rawCount;
 	}
@@ -127,14 +125,17 @@ int main(int argc, char* argv[])
 	else
 		scanFolder(input.absoluteFilePath(), parser);
 
-	parser.calculateLoss();
-
 	const QString className = QString("CTrigramFrequencyTable_") + languageName;
 	const QString headerFileName = className.toLower() + ".h";
 	const QString cppFileName = className.toLower() + ".cpp";
 
 	QFile outputFile(headerFileName);
-	outputFile.open(QFile::WriteOnly);
+	if (!outputFile.open(QFile::WriteOnly))
+	{
+		std::cout << "Failed to write " << headerFileName.toStdString() << std::endl;
+		return -1;
+	}
+
 	QTextStream stream(&outputFile);
 	stream.setEncoding(QStringConverter::Utf8);
 	stream.setGenerateByteOrderMark(false);
@@ -144,10 +145,14 @@ int main(int argc, char* argv[])
 	outputFile.close();
 
 	outputFile.setFileName(cppFileName);
-	outputFile.open(QFile::WriteOnly);
+	if (!outputFile.open(QFile::WriteOnly))
+	{
+		std::cout << "Failed to write " << cppFileName.toStdString() << std::endl;
+		return -1;
+	}
 
 	QString constructorBody;
-	const QString constructorLineTemplate("\t\t{\"%1\", %2ULL, %3f},\n");
+	const QString constructorLineTemplate("\t\t{\"%1\", %2ULL},\n");
 
 	// All-ASCII trigrams are never scored: they decode the same under every 8-bit codec
 	std::vector<std::pair<QString, CTextParser::OccurrenceTable::Stats>> sortedTable;
@@ -164,14 +169,8 @@ int main(int argc, char* argv[])
 	auto it = std::find_if(sortedTable.begin(), sortedTable.end(), [minimumOccurrences](const auto& pair) { return pair.second.rawCount < minimumOccurrences; });
 	sortedTable.erase(it, sortedTable.end());
 
-	for (size_t i = 0, N = sortedTable.size(); i < N; ++i)
-	{
-		const auto& trigram = sortedTable[i];
-		QString lossString = QString::number(trigram.second.loss, 'g', 6);
-		if (!lossString.contains('.') && !lossString.contains('e'))
-			lossString += ".0";
-		constructorBody.append(constructorLineTemplate.arg(trigram.first).arg(trigram.second.rawCount).arg(lossString));
-	}
+	for (const auto& trigram : sortedTable)
+		constructorBody.append(constructorLineTemplate.arg(trigram.first).arg(trigram.second.rawCount));
 
 	stream << tableClassCppTemplate.arg(headerFileName).arg(languageName).arg(constructorBody);
 

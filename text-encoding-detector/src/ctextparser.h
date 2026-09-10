@@ -34,7 +34,6 @@ public:
 
 		struct Stats {
 			quint64 rawCount = 0;
-			float loss = 0.0f;
 		};
 
 		struct HashTrigram {
@@ -55,7 +54,6 @@ public:
 	// This method clears the table and sets counters to 0
 	void clear();
 
-	void calculateLoss() noexcept;
 	[[nodiscard]] const OccurrenceTable& parsingResult() const;
 
 private:

@@ -1,7 +1,5 @@
 #include "ctextparser.h"
 
-#include <math.h>
-
 // Counts a trigram at every letter, non-letters dropping out without breaking the window: a trigram spans a word boundary.
 // The baked frequency tables were built by this same function, so a text scored against them must be parsed the same way.
 bool CTextParser::parse(const QString& text)
@@ -39,15 +37,6 @@ void CTextParser::clear()
 {
 	_parsingResult.trigramOccurrenceTable.clear();
 	_parsingResult.totalTrigramsCount = 0;
-}
-
-void CTextParser::calculateLoss() noexcept
-{
-	for (auto& pair : _parsingResult.trigramOccurrenceTable)
-	{
-		auto& stats = pair.second;
-		stats.loss = -logf((float)stats.rawCount / (float)_parsingResult.totalTrigramsCount);
-	}
 }
 
 

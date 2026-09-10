@@ -271,7 +271,7 @@ TEST_CASE("Trigram table: build by sorting", "[!benchmark]")
 				{
 					const auto runEnd = std::upper_bound(run, sorted.end(), *run);
 					distinctKeys.push_back(*run);
-					counts.push_back(Stats{ static_cast<quint64>(runEnd - run), 0.0f });
+					counts.push_back(Stats{ static_cast<quint64>(runEnd - run) });
 					run = runEnd;
 				}
 
