@@ -10,8 +10,9 @@ RESTORE_COMPILER_WARNINGS
 #include <string>
 #include <vector>
 
-// The committed corpus in ../corpus: real prose in six languages, each verified to survive the 8-bit
-// codecs listed for it without losing a character. See ../corpus/README.md for sources and preparation.
+// The test half of the committed corpus in ../corpus: real prose in six languages, each verified to survive
+// the 8-bit codecs listed for it without losing a character, and none of it seen by the trigram tables.
+// See ../corpus/README.md for sources and preparation.
 namespace BenchmarkCorpus {
 
 enum class Language { English, French, German, Spanish, Polish, Russian };

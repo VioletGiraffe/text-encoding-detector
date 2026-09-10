@@ -5,9 +5,19 @@ i5-12600K, Release, Qt 6.11.1.
 
 ## The corpus
 
-`corpus/` holds real prose in six languages, ~4.2 MB, committed. `corpus/README.md` lists sources and
-per-file counts; `prepare_corpus.ps1` rebuilds them and reproduces the committed bytes exactly. It sits at the
-repo root because it is the input to `text-analyzer` as much as to the tests.
+`corpus/` holds real prose in six languages, committed. `corpus/README.md` lists sources and per-file counts;
+`prepare_corpus.ps1` rebuilds them and reproduces the committed bytes exactly.
+
+Each work is split in two. `corpus/test/` is a prefix the tests, benchmarks and study read; `corpus/train/` is
+the remainder, which `text-analyzer` builds the trigram tables from. Nothing the tests score has been seen by
+a table — scoring text against tables built from that same text would flatter every number here.
+
+The tables are regenerated from the tables directory, one language at a time:
+
+```
+cd text-encoding-detector/src/trigramfrequencytables
+text_analyzer French ../../../corpus/train/french.txt
+```
 
 Committed rather than generated, for two reasons found the hard way:
 
@@ -60,9 +70,6 @@ Benchmarks and the study are hidden behind tags, so a plain run stays fast. The 
 `cpp-template-utils/tests/catch_benchmark_reporter.hpp`, which reports the mean of the fastest third of the
 samples — interference only ever adds time, so the fastest samples are the honest ones.
 
-**One case is tagged `[!shouldfail]`**: Catch2 expects it to fail and reports a failure if it ever starts
-passing. It pins the Western European defect below. Remove the tag when that is fixed.
-
 ### How the study works
 
 It builds scenarios out of the corpus — each language whole, and each mixed into English at 20%, 5% and 1%,
@@ -90,12 +97,15 @@ NUL byte — runs the full detection.
 | input | 64 KB | 256 KB | 1.3 MB |
 | --- | --- | --- | --- |
 | valid UTF-8 | 580 µs | 2.40 ms | 7.65 ms |
-| Windows-1251 | 8.56 ms | 30.2 ms | — |
+| Windows-1251, six language tables | 9.71 ms | 35.0 ms | — |
 | binary on the slow route (the test executable, measured before the guard) | 17.0 ms | 58.3 ms | — |
 
-**Roughly 5.6 ms per MB on the fast route against ~120 ms per MB on the slow one.** Binary is worse than text,
+**Roughly 5.6 ms per MB on the fast route against ~140 ms per MB on the slow one.** Binary is worse than text,
 because garbage produces more distinct trigrams than language does; the guard stops anything with a NUL byte
 at that byte, and the row above is what a binary file without one still costs.
+
+Going from two language tables to six added ~3 ms at 256 KB: each table is one more scoring pass per codec,
+and the model's own norm is precomputed at construction so a pass costs only the sample's lookups.
 
 Where the slow route's time goes, per codec, at 256 KB — and `detect()` tries about a dozen:
 
@@ -104,7 +114,7 @@ Where the slow route's time goes, per codec, at 256 KB — and `detect()` tries 
 | `parse()` | 3.78 ms | 88% |
 | codec decode | 460 µs | 11% |
 | dedup hash | 44 µs | 1% |
-| both frequency tables, built once per process | 2.33 ms | first call only |
+| all six frequency tables, built once per process | 1.63 ms | first call only |
 
 At 4 KB of input the table build is two thirds of the first call. Inside `parse()`, the hash map is about a
 quarter and the character scan — `isLetter()` plus `toLower()`, two Unicode table lookups per character — is
@@ -181,10 +191,11 @@ reading that decodes differently:
 A run-time guard can compute this; it cannot know whether the winner is right. A gate around 0.2 rejects every
 mojibake case in the study and keeps every strong correct answer.
 
-**9. Western European is not detectable with the tables this library carries.** Accented Latin matches neither
-the English model, whose trigrams hold no accents, nor the Russian one. The fix is a French or German trigram
-table, which `text-analyzer` generates — and which is another reason its broken `parse()` call matters. Until
-then the honest behaviour is to decline, which items 6 and 8 both produce.
+**9. Western European was not detectable with English and Russian tables alone.** Accented Latin matches
+neither the English model, whose trigrams hold no accents, nor the Russian one. Fixed by tables for French,
+German, Spanish and Polish built from `corpus/train/`: each of the four is now read back in the right encoding
+*and* the right language, on whole-file detection, with no other change. The `[!shouldfail]` test that pinned
+the defect is now a plain passing test.
 
 ### The design these point to
 
@@ -219,5 +230,7 @@ and a synthetic input that is wrong in a way you have not thought of returns a c
 - The NUL guard is broad both ways: a NUL-terminated text file is declined, and a binary file without a NUL
   byte still runs the full detection.
 - The text viewer's explicit "as UTF-8" action does not use the binary guard.
-- The committed tables were baked with the seed-loop `parse()` of finding 1, from a corpus that is not recorded.
-  Regenerating them from `corpus/` is what makes French and German tables possible.
+- The regenerated tables are thinner than the originals: English 3,520 entries against 17,549, Russian 6,006
+  against 14,662, the originals coming from training sets several times larger. Whether that costs accuracy
+  is for the study to say, by pulling the original tables from git history and scoring both sets — once the
+  study covers mixed files well enough for the comparison to mean something.

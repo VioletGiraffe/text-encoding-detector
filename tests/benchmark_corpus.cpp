@@ -55,7 +55,7 @@ const QString& BenchmarkCorpus::text(Language language)
 	{
 		loaded[index] = true;
 
-		QFile file{ QStringLiteral(CORPUS_DIR "/") + QLatin1String(fileFor(language).fileName) };
+		QFile file{ QStringLiteral(CORPUS_DIR "/test/") + QLatin1String(fileFor(language).fileName) };
 		if (file.open(QIODevice::ReadOnly))
 			decoded[index] = QString::fromUtf8(file.readAll()); // The corpus is UTF-8 without a byte order mark
 	}

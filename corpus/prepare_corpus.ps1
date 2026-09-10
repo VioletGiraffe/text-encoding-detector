@@ -1,16 +1,19 @@
 # Rebuilds the committed corpus files from their sources.
 #
-# The committed .txt files are what the tests read; this script exists so that what was done to them is on the
-# record and can be repeated. Running it should reproduce the committed files byte for byte.
+# The committed .txt files are what the tests and text-analyzer read; this script exists so that what was done
+# to them is on the record and can be repeated. Running it should reproduce the committed files byte for byte.
 #
 #   pwsh ./prepare_corpus.ps1                                  # the Gutenberg five
 #   pwsh ./prepare_corpus.ps1 -RussianSource <path to Anna Karenina .txt>
 #   pwsh ./prepare_corpus.ps1 -OutputDir <path>
 #
+# Each work is split in two: test/<file> is a prefix the tests read, train/<file> is the remainder text-analyzer
+# builds the trigram tables from. Nothing scored by the tests has been seen by the tables.
+#
 # Five works come from Project Gutenberg. The sixth, Russian, does not: Gutenberg holds nine Russian entries
 # and the three prose works among them are audiobooks with no text, leaving only an arithmetic textbook and
 # 18th-century odes. Anna Karenina is public domain but has to be supplied locally, so -RussianSource names it
-# and russian.txt is left alone when it is absent.
+# and the russian files are left alone when it is absent.
 #
 # Two transformations are applied, both so that encoding into the target 8-bit codecs loses nothing. A
 # character a codec cannot represent encodes as '?' - an ASCII byte, which distorts the trigram statistics and
@@ -32,17 +35,21 @@ param(
 $ErrorActionPreference = 'Stop'
 [System.Text.Encoding]::RegisterProvider([System.Text.CodePagesEncodingProvider]::Instance)
 
-$maxCharacters = 800000
-
+# max: the character cap on the whole work, 0 for none. Russian is uncapped: the one work not bounded by its
+# download, and the language with the most encodings to tell apart.
+# test: the prefix the tests read. At least a tenth of the shortest work, more where the work affords it; the
+# English one is the ASCII half of every mixed-content study scenario, the Russian one spans the benchmark ladder.
 $sources = @(
-    @{ file = 'english.txt'; id = 1342;  codepages = @();                 codecs = 'ASCII' }
-    @{ file = 'french.txt';  id = 62215; codepages = @(28591);            codecs = 'ISO-8859-1' }
-    @{ file = 'german.txt';  id = 50285; codepages = @(28591);            codecs = 'ISO-8859-1' }
-    @{ file = 'spanish.txt'; id = 2000;  codepages = @(28591);            codecs = 'ISO-8859-1' }
-    @{ file = 'polish.txt';  id = 34079; codepages = @(28592);            codecs = 'ISO-8859-2' }
-    @{ file = 'russian.txt'; path = '';  codepages = @(1251, 20866, 866); codecs = 'Windows-1251, KOI8-R, CP866'
+    @{ file = 'english.txt'; id = 1342;  max = 800000; test = 200000; codepages = @();                 codecs = 'ASCII' }
+    @{ file = 'french.txt';  id = 62215; max = 800000; test = 150000; codepages = @(28591);            codecs = 'ISO-8859-1' }
+    @{ file = 'german.txt';  id = 50285; max = 800000; test = 100000; codepages = @(28591);            codecs = 'ISO-8859-1' }
+    @{ file = 'spanish.txt'; id = 2000;  max = 800000; test = 200000; codepages = @(28591);            codecs = 'ISO-8859-1' }
+    @{ file = 'polish.txt';  id = 34079; max = 800000; test = 24000;  codepages = @(28592);            codecs = 'ISO-8859-2' }
+    @{ file = 'russian.txt'; path = '';  max = 0;      test = 800000; codepages = @(1251, 20866, 866); codecs = 'Windows-1251, KOI8-R, CP866'
        extra = [ordered]@{ ([char]0x00AB) = '"'; ([char]0x00BB) = '"'; ([char]0x2116) = 'No.' } }
 )
+
+foreach ($subdir in 'test', 'train') { New-Item -ItemType Directory -Force (Join-Path $OutputDir $subdir) | Out-Null }
 
 $replacements = [ordered]@{
     ([char]0x201C) = '"'; ([char]0x201D) = '"'; ([char]0x201E) = '"'; ([char]0x2018) = "'"; ([char]0x2019) = "'"
@@ -95,7 +102,7 @@ foreach ($source in $sources) {
     }
 
     $text = $builder.ToString()
-    if ($text.Length -gt $maxCharacters) { $text = $text.Substring(0, $maxCharacters) }
+    if ($source.max -gt 0 -and $text.Length -gt $source.max) { $text = $text.Substring(0, $source.max) }
 
     # The point of the exercise: the text must survive every one of its target codecs unchanged
     $nonAscii = 0
@@ -112,8 +119,12 @@ foreach ($source in $sources) {
 
     if ($lost -ne 0) { throw "$($source.file): $lost characters cannot be represented in $($source.codecs)" }
 
-    [System.IO.File]::WriteAllText((Join-Path $OutputDir $source.file), $text, (New-Object System.Text.UTF8Encoding($false)))
+    if ($text.Length -le $source.test) { throw "$($source.file): $($text.Length) characters leave nothing to train on after a $($source.test) test prefix" }
 
-    "{0,-12} {1,7} chars, non-ASCII {2,5:N2}%, lossless in {3}" -f `
-        $source.file, $text.Length, (100 * $nonAscii / $text.Length), $source.codecs
+    $utf8 = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText((Join-Path $OutputDir 'test' $source.file), $text.Substring(0, $source.test), $utf8)
+    [System.IO.File]::WriteAllText((Join-Path $OutputDir 'train' $source.file), $text.Substring($source.test), $utf8)
+
+    "{0,-12} {1,8} chars: test {2,7}, train {3,8}; non-ASCII {4,5:N2}%, lossless in {5}" -f `
+        $source.file, $text.Length, $source.test, ($text.Length - $source.test), (100 * $nonAscii / $text.Length), $source.codecs
 }

@@ -44,8 +44,8 @@ TEST_CASE("Every corpus file is present and holds text")
 {
 	for (const BenchmarkCorpus::Language language : BenchmarkCorpus::allLanguages)
 	{
-		INFO("corpus/" << BenchmarkCorpus::name(language) << ".txt");
-		REQUIRE(BenchmarkCorpus::text(language).size() > 100000);
+		INFO("corpus/test/" << BenchmarkCorpus::name(language) << ".txt");
+		REQUIRE(BenchmarkCorpus::text(language).size() > 20000); // The Polish test prefix is the shortest, at 24,000
 	}
 }
 
@@ -92,14 +92,9 @@ TEST_CASE("decode() recovers Russian text from every encoding it is written in")
 	}
 }
 
-// Known defect, and the tag says so: Catch2 fails this case if it ever starts passing, which is the point.
-// Western European is not detectable with the tables this library carries - accented Latin text matches
-// neither the English model, whose trigrams hold no accents, nor the Russian one. Declining would be a fine
-// answer, and the caller would fall back. Instead decode() reads the file as UTF-8, which turns every accented
-// byte into a replacement character: those are not letters, so parse() drops them and closes the surrounding
-// letters over the gap, scoring better than the correct reading whose accented trigrams the model has never
-// seen. The scoring rewards a codec for destroying what it cannot match, and the caller cannot tell.
-TEST_CASE("decode() declines rather than guessing at Western European text", "[!shouldfail]")
+// Each of these languages needs a table of its own: with only the English one, the UTF-8 reading won, its
+// replacement characters dropping out as non-letters and the letters around them closing into English trigrams.
+TEST_CASE("decode() recovers Western European text from its 8-bit encoding")
 {
 	for (const BenchmarkCorpus::Language language :
 		{ BenchmarkCorpus::Language::French, BenchmarkCorpus::Language::German,

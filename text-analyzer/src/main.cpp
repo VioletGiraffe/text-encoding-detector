@@ -34,39 +34,64 @@ struct Trigram {
 	quint64 rawCount = 0;
 	float loss = 0.0f;
 };
-}
 
-CTrigramFrequencyTable_%2::CTrigramFrequencyTable_%2() noexcept
+CTextParser::OccurrenceTable buildTable()
 {
 	static const Trigram trigrams[] = {
 %3
 		{nullptr, 0, 0.0f},
 	};
 
-	_table.trigramOccurrenceTable.reserve(std::size(trigrams));
+	CTextParser::OccurrenceTable table;
+	table.trigramOccurrenceTable.reserve(std::size(trigrams));
 
 	uint64_t totalCount = 0;
 	for (quint64 i = 0; trigrams[i].trigram != nullptr; ++i)
 	{
 		const QString trigramString = QString::fromUtf8(trigrams[i].trigram);
-		_table.trigramOccurrenceTable.try_emplace(
+		table.trigramOccurrenceTable.try_emplace(
 			CTextParser::OccurrenceTable::Trigram{ trigramString[0], trigramString[1], trigramString[2] },
 			CTextParser::OccurrenceTable::Stats{ trigrams[i].rawCount, trigrams[i].loss }
 		);
 		totalCount += trigrams[i].rawCount;
 	}
 
-	_table.totalTrigramsCount = totalCount;
+	table.totalTrigramsCount = totalCount;
+	return table;
+}
+}
+
+CTrigramFrequencyTable_%2::CTrigramFrequencyTable_%2() noexcept
+	: CTrigramFrequencyTable_Base(buildTable())
+{
 }
 )";
 
 static void printUsageInstructions()
 {
 	std::cout << "Usage:" << std::endl;
-	std::cout << "text_analyzer <language name> <path to textfiles folder>" << std::endl;
+	std::cout << "text_analyzer <language name> <path to a text file, or to a folder of .txt files>" << std::endl;
 	std::cout << "Text files must be encoded in UTF-8." << std::endl;
 	std::cout << std::endl;
 	std::cout << "Output: ctrigramfrequencytable_<Language name>.h and ctrigramfrequencytable_<Language name>.cpp source files in the working directory, containing the declaration and definition of the CTrigramFrequencyTable_<Language name> class." << std::endl;
+}
+
+static void parseFile(const QFileInfo& entry, CTextParser& parser)
+{
+	QFile file{ entry.absoluteFilePath() };
+	if (!file.open(QFile::ReadOnly))
+	{
+		std::cout << "Failed to open " << entry.fileName().toStdString() << std::endl;
+		return;
+	}
+
+	// Invalid UTF-8 decodes to replacement characters: parse() skips them as non-letters and joins the letters around them into trigrams the text never had
+	const QString text = QString::fromUtf8(file.readAll());
+	if (text.contains(QChar{ QChar::ReplacementCharacter }) || !parser.parse(text))
+	{
+		std::cout << "Failed to parse " << entry.fileName().toStdString() << std::endl;
+		std::cout << "Make sure it's a UTF-8 text file." << std::endl;
+	}
 }
 
 // Iterate the folder, scan all .txt files
@@ -81,24 +106,9 @@ static void scanFolder(const QString& folderPath, CTextParser& parser)
 		if (entry.isDir())
 			scanFolder(entry.absoluteFilePath(), parser);
 		else if (entry.isFile() && entry.suffix().toLower() == "txt")
-		{
-			QFile file{ entry.absoluteFilePath() };
-			if (!file.open(QFile::ReadOnly))
-			{
-				std::cout << "Failed to open " << entry.fileName().toStdString() << std::endl;
-				continue;
-			}
-
-			// Invalid UTF-8 decodes to replacement characters: parse() skips them as non-letters and joins the letters around them into trigrams the text never had
-			const QString text = QString::fromUtf8(file.readAll());
-			if (text.contains(QChar{ QChar::ReplacementCharacter }) || !parser.parse(text))
-			{
-				std::cout << "Failed to parse " << entry.fileName().toStdString() << std::endl;
-				std::cout << "Make sure it's a UTF-8 text file." << std::endl;
-			}
-		}
+			parseFile(entry, parser);
 	}
-};
+}
 
 int main(int argc, char* argv[])
 {
@@ -111,7 +121,10 @@ int main(int argc, char* argv[])
 	const QString languageName(argv[1]);
 
 	CTextParser parser;
-	scanFolder(argv[2], parser);
+	if (const QFileInfo input{ QString{ argv[2] } }; input.isFile())
+		parseFile(input, parser);
+	else
+		scanFolder(input.absoluteFilePath(), parser);
 
 	parser.calculateLoss();
 

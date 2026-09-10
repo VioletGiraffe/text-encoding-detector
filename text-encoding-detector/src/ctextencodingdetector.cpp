@@ -1,6 +1,10 @@
 #include "ctextencodingdetector.h"
 #include "trigramfrequencytables/ctrigramfrequencytable_english.h"
+#include "trigramfrequencytables/ctrigramfrequencytable_french.h"
+#include "trigramfrequencytables/ctrigramfrequencytable_german.h"
+#include "trigramfrequencytables/ctrigramfrequencytable_polish.h"
 #include "trigramfrequencytables/ctrigramfrequencytable_russian.h"
+#include "trigramfrequencytables/ctrigramfrequencytable_spanish.h"
 
 #include "assert/advanced_assert.h"
 
@@ -63,14 +67,14 @@ bool isUtf8(const QByteArray& data)
 	return totalLoss / static_cast<double>(totalCount);
 }
 
-[[nodiscard]] inline double cosineDistance(const CTextParser::OccurrenceTable& model, const CTextParser::OccurrenceTable& sample) noexcept
+[[nodiscard]] inline double cosineDistance(const CTrigramFrequencyTable_Base& model, const CTextParser::OccurrenceTable& sample) noexcept
 {
 	const double unknownPenaltyWeight = 0.0; // Adjust this weight to control the penalty for unknown trigrams
-	if (model.trigramOccurrenceTable.empty() || sample.trigramOccurrenceTable.empty())
+	const auto& modelTable = model.trigramOccurrenceTable().trigramOccurrenceTable;
+	if (modelTable.empty() || sample.trigramOccurrenceTable.empty())
 		return 1.0 + unknownPenaltyWeight;
 
 	double dot = 0.0;
-	double modelNormSq = 0.0;
 	double sampleNormSq = 0.0;
 	double unknownCount = 0.0;
 	double sampleTotalCount = 0.0;
@@ -81,8 +85,8 @@ bool isUtf8(const QByteArray& data)
 		sampleNormSq += sampleCount * sampleCount;
 		sampleTotalCount += sampleCount;
 
-		const auto modelIt = model.trigramOccurrenceTable.find(trigram);
-		if (modelIt != model.trigramOccurrenceTable.end())
+		const auto modelIt = modelTable.find(trigram);
+		if (modelIt != modelTable.end())
 		{
 			const double modelCount = static_cast<double>(modelIt->second.rawCount);
 			dot += sampleCount * modelCount;
@@ -93,12 +97,7 @@ bool isUtf8(const QByteArray& data)
 		}
 	}
 
-	for (const auto& [_, modelStats] : model.trigramOccurrenceTable)
-	{
-		const double modelCount = static_cast<double>(modelStats.rawCount);
-		modelNormSq += modelCount * modelCount;
-	}
-
+	const double modelNormSq = model.countsNormSquared();
 	if (modelNormSq <= 0.0 || sampleNormSq <= 0.0 || sampleTotalCount <= 0.0)
 		return 1.0 + unknownPenaltyWeight;
 
@@ -123,7 +122,11 @@ inline bool contains(const Container& container, const Value& value)
 	static const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>> tables = [] {
 		std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>> built;
 		built.push_back(std::make_unique<CTrigramFrequencyTable_English>());
+		built.push_back(std::make_unique<CTrigramFrequencyTable_French>());
+		built.push_back(std::make_unique<CTrigramFrequencyTable_German>());
+		built.push_back(std::make_unique<CTrigramFrequencyTable_Polish>());
 		built.push_back(std::make_unique<CTrigramFrequencyTable_Russian>());
+		built.push_back(std::make_unique<CTrigramFrequencyTable_Spanish>());
 		return built;
 	}();
 
@@ -252,7 +255,7 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetecto
 
 		for (const auto& table : languageStatisticsTables)
 		{
-			const double distanceScore = cosineDistance(table->trigramOccurrenceTable(), parser.parsingResult());
+			const double distanceScore = cosineDistance(*table, parser.parsingResult());
 			match.emplace_back(CTextEncodingDetector::EncodingDetectionResult{ codec->name(), table->language(), distanceScore });
 		}
 	}
