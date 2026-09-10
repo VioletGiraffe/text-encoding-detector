@@ -9,7 +9,6 @@ RESTORE_COMPILER_WARNINGS
 #include "ctextparser.h"
 #include "trigramfrequencytables/ctrigramfrequencytable_russian.h"
 
-#include "container/flat_map.hpp"
 #include <hash/wheathash.hpp>
 
 DISABLE_COMPILER_WARNINGS
@@ -22,13 +21,15 @@ RESTORE_COMPILER_WARNINGS
 #include <ranges>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
 #include <vector>
 
-// The trigram table is the detector's one data structure, and it carries two workloads that stress a container
-// in opposite ways:
-//   build  - insert-or-increment, once per letter, growing to tens of thousands of distinct keys (CTextParser::parse)
+// The trigram table is the detector's one data structure, and it carries three workloads that stress a container
+// in different ways:
+//   build  - insert-or-increment into an empty table, growing to thousands of distinct keys (the first codec)
+//   refill - the same after clear(), the buckets already grown (every codec after it, detect() holding one parser)
 //   lookup - find(), once per distinct sample key, against a model table that never changes (cosineDistance)
-// Both run once per codec, and detect() tries a dozen.
+// detect() tries a dozen codecs, so refill runs eleven times for each build.
 //
 // Two key shapes are measured. The uint64 packing three code points into 48 bits is what the library holds: the
 // comparison is a single integer one, and a few instructions replace a call into a general-purpose hash. Three
@@ -86,19 +87,18 @@ template <typename Key> using HashFor = std::conditional_t<std::is_same_v<Key, u
 
 template <typename Key> using BoostMap = boost::unordered_flat_map<Key, Stats, HashFor<Key>>;
 template <typename Key> using AnkerlMap = ankerl::unordered_dense::map<Key, Stats, HashFor<Key>>;
-using SortedVectorMap = flat_map<uint64_t, Stats>;
+
+// The same table with its values in fixed blocks instead of one vector that doubles and copies: slower on both
+// workloads, so the dense map's build cost is not the growth of that vector
+template <typename Key> using AnkerlSegmentedMap = ankerl::unordered_dense::segmented_map<Key, Stats, HashFor<Key>>;
+
+// The standard's node-based table, for scale: what the detector would run on with no dependency at all
+template <typename Key> using StdMap = std::unordered_map<Key, Stats, HashFor<Key>>;
 
 // Russian: the trigram stream a real detection pass walks, and the language the baked model below is for
 constexpr auto corpusLanguage = BenchmarkCorpus::Language::Russian;
 
 constexpr qsizetype characterCounts[] = { 64 * 1024, 256 * 1024, 768 * 1024 };
-
-// A sorted vector shifts its tail on every key it has not seen before, so its build is quadratic in the
-// distinct key count while the hash maps stay linear. The ceiling keeps one comparable point without
-// spending minutes on the case that is already decided.
-constexpr qsizetype maxCharactersForSortedVectorBuild = 64 * 1024;
-
-template <typename Map> constexpr bool isSortedVector = std::is_same_v<Map, SortedVectorMap>;
 
 // The trigram stream parse() walks: one entry per letter from the third on, duplicates and all
 [[nodiscard]] std::vector<CharsTrigram> trigramStream(qsizetype characters)
@@ -206,18 +206,41 @@ void benchmarkBuild(const char* container, const char* key)
 		if (BenchmarkCorpus::text(corpusLanguage).size() < characters)
 			continue;
 
-		if constexpr (isSortedVector<Map>)
-		{
-			if (characters > maxCharactersForSortedVectorBuild)
-				continue;
-		}
-
 		const std::vector<Key> keys = streamOf<Key>(characters);
 		BENCHMARK_ADVANCED(caseName(container, key, characters))(Catch::Benchmark::Chronometer meter)
 		{
-			// Construction and destruction are inside the region: parse() pays both, once per codec
+			// Construction and destruction are inside the region: what the first codec of a pass pays, and any
+			// caller that parses once. Every later codec pays the refill case instead.
 			meter.measure([&keys] {
 				Map map;
+				fill(map, keys);
+				return map.size();
+			});
+		};
+	}
+}
+
+template <typename Map>
+void benchmarkRefill(const char* container, const char* key)
+{
+	using Key = typename Map::key_type;
+
+	for (const qsizetype characters : characterCounts)
+	{
+		if (BenchmarkCorpus::text(corpusLanguage).size() < characters)
+			continue;
+
+		const std::vector<Key> keys = streamOf<Key>(characters);
+
+		// Filled once outside the region, which leaves the table where the first codec leaves it. detect() also
+		// reserves a thousand trigrams up front, and every size here grows past that, so the state is the same.
+		Map map;
+		fill(map, keys);
+
+		BENCHMARK_ADVANCED(caseName(container, key, characters))(Catch::Benchmark::Chronometer meter)
+		{
+			meter.measure([&map, &keys] {
+				map.clear();
 				fill(map, keys);
 				return map.size();
 			});
@@ -239,7 +262,7 @@ void benchmarkLookup(const char* container, const char* key)
 		fill(model, modelKeys<Key>());
 
 		// The distinct keys of a sample, which is what a scoring pass walks. Reduced without a container:
-		// the set is the same for every container, and building it in flat_map would cost more than the case does.
+		// the set is the same for every container, and building one to reduce it would cost more than the case does.
 		const std::vector<Key> sampleKeys = distinctKeysOf(streamOf<Key>(characters));
 
 		BENCHMARK_ADVANCED(caseName(container, key, characters))(Catch::Benchmark::Chronometer meter)
@@ -263,16 +286,31 @@ void benchmarkLookup(const char* container, const char* key)
 TEST_CASE("Trigram table: build", "[!benchmark]")
 {
 	benchmarkBuild<BoostMap<CharsTrigram>>("boost::unordered_flat_map", "3 QChars");
-	benchmarkBuild<AnkerlMap<CharsTrigram>>("ankerl::unordered_dense", "3 QChars");
+	benchmarkBuild<AnkerlMap<CharsTrigram>>("ankerl::unordered_dense::map", "3 QChars");
+	benchmarkBuild<AnkerlSegmentedMap<CharsTrigram>>("ankerl::unordered_dense::segmented_map", "3 QChars");
 	benchmarkBuild<BoostMap<uint64_t>>("boost::unordered_flat_map", "uint64");
-	benchmarkBuild<AnkerlMap<uint64_t>>("ankerl::unordered_dense", "uint64");
-	benchmarkBuild<SortedVectorMap>("flat_map", "uint64");
+	benchmarkBuild<AnkerlMap<uint64_t>>("ankerl::unordered_dense::map", "uint64");
+	benchmarkBuild<AnkerlSegmentedMap<uint64_t>>("ankerl::unordered_dense::segmented_map", "uint64");
+	benchmarkBuild<StdMap<CharsTrigram>>("std::unordered_map", "3 QChars");
+	benchmarkBuild<StdMap<uint64_t>>("std::unordered_map", "uint64");
+}
+
+TEST_CASE("Trigram table: refill after clear", "[!benchmark]")
+{
+	benchmarkRefill<BoostMap<CharsTrigram>>("boost::unordered_flat_map", "3 QChars");
+	benchmarkRefill<AnkerlMap<CharsTrigram>>("ankerl::unordered_dense::map", "3 QChars");
+	benchmarkRefill<AnkerlSegmentedMap<CharsTrigram>>("ankerl::unordered_dense::segmented_map", "3 QChars");
+	benchmarkRefill<BoostMap<uint64_t>>("boost::unordered_flat_map", "uint64");
+	benchmarkRefill<AnkerlMap<uint64_t>>("ankerl::unordered_dense::map", "uint64");
+	benchmarkRefill<AnkerlSegmentedMap<uint64_t>>("ankerl::unordered_dense::segmented_map", "uint64");
+	benchmarkRefill<StdMap<CharsTrigram>>("std::unordered_map", "3 QChars");
+	benchmarkRefill<StdMap<uint64_t>>("std::unordered_map", "uint64");
 }
 
 TEST_CASE("Trigram table: build by sorting", "[!benchmark]")
 {
 	// What a flat container is actually good at: append every key, sort once, then count the runs.
-	// The result is a sorted key array, which is the form flat_map holds and the form a lookup pass wants.
+	// The result is a sorted key array, the form a binary-searching lookup pass wants.
 	for (const qsizetype characters : characterCounts)
 	{
 		if (BenchmarkCorpus::text(corpusLanguage).size() < characters)
@@ -304,8 +342,11 @@ TEST_CASE("Trigram table: build by sorting", "[!benchmark]")
 TEST_CASE("Trigram table: lookup against the model", "[!benchmark]")
 {
 	benchmarkLookup<BoostMap<CharsTrigram>>("boost::unordered_flat_map", "3 QChars");
-	benchmarkLookup<AnkerlMap<CharsTrigram>>("ankerl::unordered_dense", "3 QChars");
+	benchmarkLookup<AnkerlMap<CharsTrigram>>("ankerl::unordered_dense::map", "3 QChars");
+	benchmarkLookup<AnkerlSegmentedMap<CharsTrigram>>("ankerl::unordered_dense::segmented_map", "3 QChars");
 	benchmarkLookup<BoostMap<uint64_t>>("boost::unordered_flat_map", "uint64");
-	benchmarkLookup<AnkerlMap<uint64_t>>("ankerl::unordered_dense", "uint64");
-	benchmarkLookup<SortedVectorMap>("flat_map", "uint64");
+	benchmarkLookup<AnkerlMap<uint64_t>>("ankerl::unordered_dense::map", "uint64");
+	benchmarkLookup<AnkerlSegmentedMap<uint64_t>>("ankerl::unordered_dense::segmented_map", "uint64");
+	benchmarkLookup<StdMap<CharsTrigram>>("std::unordered_map", "3 QChars");
+	benchmarkLookup<StdMap<uint64_t>>("std::unordered_map", "uint64");
 }

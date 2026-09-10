@@ -338,6 +338,15 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetecto
 	std::vector<CTextEncodingDetector::EncodingDetectionResult> match;
 	match.reserve(codecs.size() * languageStatisticsTables.size());
 
+	// Sized for the sparsest input the detector meets, an ASCII host carrying a little foreign text. Prose reaches
+	// ten times this and grows past it: reserving for prose instead leaves a table too sparse for cosineDistance(),
+	// which iterates it once per codec per language table.
+	constexpr size_t initialTrigramCapacity = 1024;
+
+	// Reused across codecs: clear() keeps the trigram table's buckets, so only the first codec grows them
+	CTextParser parser;
+	parser.reserve(initialTrigramCapacity);
+
 	for (const auto& codec : codecs)
 	{
 		const std::unique_ptr<QTextDecoder> decoder{ codec->makeDecoder() };
@@ -350,7 +359,7 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetecto
 
 		hashes.push_back(hash);
 
-		CTextParser parser;
+		parser.clear();
 		if (!parser.parse(decodedText))
 			continue;
 

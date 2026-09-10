@@ -76,6 +76,11 @@ void CTextParser::clear()
 	_parsingResult.totalTrigramsCount = 0;
 }
 
+void CTextParser::reserve(size_t distinctTrigrams)
+{
+	_parsingResult.trigramOccurrenceTable.reserve(distinctTrigrams);
+}
+
 
 const CTextParser::OccurrenceTable & CTextParser::parsingResult() const
 {

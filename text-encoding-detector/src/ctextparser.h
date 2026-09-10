@@ -9,6 +9,7 @@ RESTORE_COMPILER_WARNINGS
 #include <boost/unordered/unordered_flat_map.hpp>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 
@@ -81,6 +82,9 @@ public:
 
 	// This method clears the table and sets counters to 0
 	void clear();
+
+	// Buckets for this many distinct trigrams. clear() keeps them, so one call covers every parse that follows.
+	void reserve(size_t distinctTrigrams);
 
 	[[nodiscard]] const OccurrenceTable& parsingResult() const;
 

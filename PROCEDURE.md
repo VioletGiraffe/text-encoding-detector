@@ -148,35 +148,60 @@ The map's key is the three code points packed into the low 48 bits of a `uint64`
 finalizer. It is worth more than the scan table: `parse()` runs 2.1 to 2.5 times faster than with a key of three
 `QChar` hashed as six bytes, on every script measured.
 
+`detect()` reuses one `CTextParser` across the codecs and reserves a thousand trigrams in it up front, `clear()`
+keeping the buckets. Only the first codec grows them, and a sparse input never does. That is worth 15% of a 4 KB
+file against 2% of a 256 KB one, growth being a smaller share of a larger parse. Reserving for prose rather than
+for the sparsest input costs more than it saves: `cosineDistance()` walks the sample table once per codec per
+language table, and one sized for ten thousand trigrams holding eight hundred is slower to walk than to grow.
+
 Per 128 K characters, the whole `decode()` call on the slow route:
 
 | input | `decode()` |
 | --- | --- |
-| 1% Cyrillic clustered in a JSON host | 2.6 ms |
+| 1% Cyrillic clustered in a JSON host | 2.5 ms |
 | 5% Cyrillic interleaved into C source | 6.1 ms |
-| French prose, ISO-8859-1 | 7.4 ms |
-| Russian prose, Windows-1251 | 11.0 ms |
+| French prose, ISO-8859-1 | 7.2 ms |
+| Russian prose, Windows-1251 | 10.8 ms |
 
 A file mixed into an ASCII host is the most ASCII input that reaches detection at all — one with no non-ASCII byte
 is valid UTF-8, and `isUtf8()` answers it.
 
 ### The trigram container
 
-Both workloads, at 768 K characters. Build is insert-or-increment, what `parse()` does; lookup is `find()`
-against the baked model, what `cosineDistance()` does.
+Three workloads at 768 K characters, all with the packed key. Build is insert-or-increment into an empty table,
+what the first codec of a pass pays; refill is the same after `clear()`, what the eleven after it pay; lookup is
+`find()` against the baked model, what `cosineDistance()` does.
 
-| container | build, 3 QChars | build, uint64 | lookup, 3 QChars | lookup, uint64 |
-| --- | --- | --- | --- | --- |
-| `boost::unordered_flat_map` | **3.21 ms** | **1.91 ms** | **65.9 µs** | **33.4 µs** |
-| `ankerl::unordered_dense` | 9.27 ms | 7.36 ms | 134 µs | 88.2 µs |
-| `flat_map` (sorted vector) | 5.35 ms @ 64 K, where boost takes 352 µs | — | 399 µs | — |
-| sort and count runs | 26.1 ms | — | — | — |
+| container | build | refill | lookup |
+| --- | --- | --- | --- |
+| `boost::unordered_flat_map` | **1.68 ms** | **1.52 ms** | **49.8 µs** |
+| `std::unordered_map` | 5.05 ms | 3.06 ms | 105 µs |
+| `ankerl::unordered_dense::map` | 6.96 ms | 6.44 ms | 119 µs |
+| `ankerl::unordered_dense::segmented_map` | 8.33 ms | 7.68 ms | 110 µs |
+| sort and count runs | 24.0 ms | — | — |
 
-**Boost wins every cell by 2–4×**, which is unusual enough to be worth recording: `unordered_dense` normally
-matches or beats it. The sorted vector is not competitive on either workload, and neither is the flat-container
-approach of appending everything and sorting once. Packing the three `QChar` into a `uint64` is worth 1.7× on
-build and 2.0× on lookup here, and more than that inside `parse()`, where the key is produced in registers rather
-than read from a vector prepared outside the measured region.
+**Boost wins every cell by 2.0× to 3.0× over the next best**, and the next best is the standard's node-based
+table. `unordered_dense` losing to `std::unordered_map` on build and refill is unusual enough to be worth
+recording, and it is not the value container: `segmented_map`, the same table holding its values in fixed blocks
+rather than in one vector that doubles and copies, is slower still on both. What remains is the bucket array,
+where robin-hood insertion shifts to keep its distance ordering while Boost matches a group of fingerprints at
+once and maintains no ordering. Note also that the workload is mostly increments rather than insertions: 768 K
+characters yield far more repeated trigrams than distinct ones, so these columns weigh finding an existing key
+heavily.
+
+Reuse pays every container back, but not evenly. Boost gains 10% and the dense maps 7 to 8%, while
+`std::unordered_map` gains 39%, the one container that frees a node per element on `clear()` and then takes them
+straight back off a warm free list. Growth is a larger share at smaller sizes, where Boost's gain reaches 23% at
+64 K characters.
+
+A sorted vector was measured and dropped: its build is quadratic in the distinct key count. Appending everything
+and sorting once is not competitive either. Both were run with the packed key only, being pointless with the
+slower one. Packing the three `QChar` into a `uint64` is worth 1.8× on build and 1.8× on lookup here, and more
+than that inside `parse()`, where the key is produced in registers rather than read from a vector prepared
+outside the measured region.
+
+Lookup is tens of microseconds and moves with the state of the cache when the case runs, so treat its column as
+an ordering rather than as figures to compare against a later run.
 
 ## Findings: correctness
 
