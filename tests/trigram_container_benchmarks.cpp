@@ -10,6 +10,7 @@ RESTORE_COMPILER_WARNINGS
 #include "trigramfrequencytables/ctrigramfrequencytable_russian.h"
 
 #include "container/flat_map.hpp"
+#include <hash/wheathash.hpp>
 
 DISABLE_COMPILER_WARNINGS
 #include <3rdparty/ankerl/unordered_dense.h>
@@ -29,18 +30,32 @@ RESTORE_COMPILER_WARNINGS
 //   lookup - find(), once per distinct sample key, against a model table that never changes (cosineDistance)
 // Both run once per codec, and detect() tries a dozen.
 //
-// Two key shapes are measured. The Trigram of three QChars is what the library holds today; the uint64 packs
-// the same three code points into 48 bits, which shrinks the key, makes the comparison a single integer one,
-// and lets a few instructions replace a call into a general-purpose hash. The uint64 cases measure that as the
-// package it would ship as, not as three separable changes.
+// Two key shapes are measured. The uint64 packing three code points into 48 bits is what the library holds: the
+// comparison is a single integer one, and a few instructions replace a call into a general-purpose hash. Three
+// QChars compared as six bytes is the shape it replaced, kept here so the choice can be rechecked.
 
 namespace {
 
-using Trigram = CTextParser::OccurrenceTable::Trigram;
 using Stats = CTextParser::OccurrenceTable::Stats;
-using HashTrigram = CTextParser::OccurrenceTable::HashTrigram;
 
-// splitmix64's finalizer: avalanching in a handful of instructions
+struct CharsTrigram
+{
+	bool constexpr operator==(const CharsTrigram& other) const noexcept = default;
+
+	std::array<QChar, 3> chars;
+};
+
+struct HashCharsTrigram
+{
+	using is_avalanching = std::true_type;
+
+	[[nodiscard]] uint64_t operator()(const CharsTrigram& trigram) const noexcept
+	{
+		return ::wheathash64(trigram.chars.data(), trigram.chars.size() * sizeof(trigram.chars[0]));
+	}
+};
+
+// What CTextParser::OccurrenceTable::HashTrigram does, over the same key
 struct HashPackedTrigram
 {
 	using is_avalanching = std::true_type;
@@ -55,14 +70,19 @@ struct HashPackedTrigram
 	}
 };
 
-[[nodiscard]] constexpr uint64_t packed(const Trigram& trigram) noexcept
+[[nodiscard]] constexpr uint64_t packed(const CharsTrigram& trigram) noexcept
 {
 	return uint64_t{ trigram.chars[0].unicode() }
 		| (uint64_t{ trigram.chars[1].unicode() } << 16)
 		| (uint64_t{ trigram.chars[2].unicode() } << 32);
 }
 
-template <typename Key> using HashFor = std::conditional_t<std::is_same_v<Key, uint64_t>, HashPackedTrigram, HashTrigram>;
+[[nodiscard]] constexpr CharsTrigram unpacked(uint64_t key) noexcept
+{
+	return CharsTrigram{ { QChar{ static_cast<char16_t>(key) }, QChar{ static_cast<char16_t>(key >> 16) }, QChar{ static_cast<char16_t>(key >> 32) } } };
+}
+
+template <typename Key> using HashFor = std::conditional_t<std::is_same_v<Key, uint64_t>, HashPackedTrigram, HashCharsTrigram>;
 
 template <typename Key> using BoostMap = boost::unordered_flat_map<Key, Stats, HashFor<Key>>;
 template <typename Key> using AnkerlMap = ankerl::unordered_dense::map<Key, Stats, HashFor<Key>>;
@@ -81,12 +101,12 @@ constexpr qsizetype maxCharactersForSortedVectorBuild = 64 * 1024;
 template <typename Map> constexpr bool isSortedVector = std::is_same_v<Map, SortedVectorMap>;
 
 // The trigram stream parse() walks: one entry per letter from the third on, duplicates and all
-[[nodiscard]] std::vector<Trigram> trigramStream(qsizetype characters)
+[[nodiscard]] std::vector<CharsTrigram> trigramStream(qsizetype characters)
 {
-	std::vector<Trigram> stream;
+	std::vector<CharsTrigram> stream;
 
 	const QString text = BenchmarkCorpus::text(corpusLanguage).left(characters);
-	Trigram trigram{};
+	CharsTrigram trigram{};
 	for (const QChar c : text)
 	{
 		if (!c.isLetter())
@@ -105,11 +125,11 @@ template <typename Map> constexpr bool isSortedVector = std::is_same_v<Map, Sort
 
 [[nodiscard]] std::vector<uint64_t> packedStream(qsizetype characters)
 {
-	const std::vector<Trigram> source = trigramStream(characters);
+	const std::vector<CharsTrigram> source = trigramStream(characters);
 
 	std::vector<uint64_t> stream;
 	stream.reserve(source.size());
-	for (const Trigram& trigram : source)
+	for (const CharsTrigram& trigram : source)
 		stream.push_back(packed(trigram));
 
 	return stream;
@@ -136,9 +156,9 @@ template <typename Key>
 	for (const auto& [trigram, stats] : model)
 	{
 		if constexpr (std::is_same_v<Key, uint64_t>)
-			keys.push_back(packed(trigram));
+			keys.push_back(trigram.packed);
 		else
-			keys.push_back(trigram);
+			keys.push_back(unpacked(trigram.packed));
 	}
 
 	return keys;
@@ -242,8 +262,8 @@ void benchmarkLookup(const char* container, const char* key)
 
 TEST_CASE("Trigram table: build", "[!benchmark]")
 {
-	benchmarkBuild<BoostMap<Trigram>>("boost::unordered_flat_map", "Trigram");
-	benchmarkBuild<AnkerlMap<Trigram>>("ankerl::unordered_dense", "Trigram");
+	benchmarkBuild<BoostMap<CharsTrigram>>("boost::unordered_flat_map", "3 QChars");
+	benchmarkBuild<AnkerlMap<CharsTrigram>>("ankerl::unordered_dense", "3 QChars");
 	benchmarkBuild<BoostMap<uint64_t>>("boost::unordered_flat_map", "uint64");
 	benchmarkBuild<AnkerlMap<uint64_t>>("ankerl::unordered_dense", "uint64");
 	benchmarkBuild<SortedVectorMap>("flat_map", "uint64");
@@ -283,8 +303,8 @@ TEST_CASE("Trigram table: build by sorting", "[!benchmark]")
 
 TEST_CASE("Trigram table: lookup against the model", "[!benchmark]")
 {
-	benchmarkLookup<BoostMap<Trigram>>("boost::unordered_flat_map", "Trigram");
-	benchmarkLookup<AnkerlMap<Trigram>>("ankerl::unordered_dense", "Trigram");
+	benchmarkLookup<BoostMap<CharsTrigram>>("boost::unordered_flat_map", "3 QChars");
+	benchmarkLookup<AnkerlMap<CharsTrigram>>("ankerl::unordered_dense", "3 QChars");
 	benchmarkLookup<BoostMap<uint64_t>>("boost::unordered_flat_map", "uint64");
 	benchmarkLookup<AnkerlMap<uint64_t>>("ankerl::unordered_dense", "uint64");
 	benchmarkLookup<SortedVectorMap>("flat_map", "uint64");

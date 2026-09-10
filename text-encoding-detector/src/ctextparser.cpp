@@ -48,7 +48,6 @@ bool CTextParser::parse(const QString& text)
 	const qsizetype textSize = text.size();
 	const LoweredLetters& letterTable = loweredLetterTable(); // One initialization guard per call instead of per character
 
-	// Null characters: the sliding window is short of letters until all three have shifted in, and no letter is null
 	OccurrenceTable::Trigram trigram{};
 	quint64 trigramsCount = 0;
 
@@ -58,11 +57,8 @@ bool CTextParser::parse(const QString& text)
 		if (lowered.isNull())
 			continue;
 
-		trigram.chars[0] = trigram.chars[1];
-		trigram.chars[1] = trigram.chars[2];
-		trigram.chars[2] = lowered;
-
-		if (trigram.chars[0].isNull()) [[unlikely]]
+		trigram.shiftIn(lowered);
+		if (!trigram.isComplete()) [[unlikely]]
 			continue;
 
 		_parsingResult.trigramOccurrenceTable[trigram].rawCount += 1;

@@ -6,6 +6,7 @@
 #include "trigramfrequencytables/ctrigramfrequencytable_spanish.h"
 
 #include "assert/advanced_assert.h"
+#include <hash/wheathash.hpp>
 
 DISABLE_COMPILER_WARNINGS
 #include <QTextCodec>

@@ -111,18 +111,17 @@ NUL byte — runs the detection, on the whole input up to 256 KB and on a sample
 
 | input | 64 KB | 256 KB | 1.3 MB |
 | --- | --- | --- | --- |
-| valid UTF-8 | 580 µs | 2.40 ms | 7.65 ms |
-| Windows-1251, eleven codecs, five language tables | 10.1 ms | 38.6 ms | 48.8 ms at 768 KB |
-| binary on the slow route (the test executable, measured before the guard) | 17.0 ms | 58.3 ms | — |
+| valid UTF-8 | 585 µs | 2.33 ms | 7.51 ms |
+| Windows-1251, eleven codecs, five language tables | 5.55 ms | 19.8 ms | 28.9 ms at 768 KB |
 
-BOM-less UTF-16LE, the wide route: 859 µs at 128 KB, 3.44 ms at 512 KB, 10.4 ms at 1.5 MB — about 6.8 ms per
+BOM-less UTF-16LE, the wide route: 770 µs at 128 KB, 3.21 ms at 512 KB, 9.91 ms at 1.5 MB — about 6.6 ms per
 MB, the fast route's class.
 
-**Roughly 5.6 ms per MB on the fast route against ~150 ms per MB on the slow one, which the sample caps.** Past
-256 KB the slow route costs the 39 ms of a 256 KB detection, two passes over the bytes and one decode of the
-whole input: 48.8 ms at 768 KB. Binary is worse than text, because garbage produces more distinct trigrams than
-language does; the guard stops anything with a NUL byte at that byte, and the row above is what a binary file
-without one still costs.
+**Roughly 5.6 ms per MB on the fast route against about 79 ms per MB on the slow one, which the sample caps.**
+Past 256 KB the slow route costs the 20 ms of a 256 KB detection, two passes over the bytes and one decode of the
+whole input: 28.9 ms at 768 KB. Binary is worse than text at the same size, because garbage produces more distinct
+trigrams than language does; the guard stops anything with a NUL byte at that byte, and a binary file without one
+still runs the whole detection.
 
 Each language table is one more scoring pass per codec; the model's own norm is precomputed at construction,
 and only the sample's non-ASCII trigrams are looked up, so a pass is cheap next to `parse()`.
@@ -131,37 +130,42 @@ Where the slow route's time goes, per codec, at 256 KB — and `detect()` tries 
 
 | phase | cost | share |
 | --- | --- | --- |
-| `parse()` | 3.78 ms | 88% |
-| codec decode | 460 µs | 11% |
-| dedup hash | 44 µs | 1% |
-| all five frequency tables, built once per process | 0.60 ms | first call only |
+| `parse()` | 1.26 ms | 72% |
+| codec decode | 443 µs | 25% |
+| dedup hash | 42 µs | 2% |
+| all five frequency tables, built once per process | 0.56 ms | first call only |
 
-At 4 KB of input the table build is two thirds of the first call. Inside `parse()`, the hash map is about a
-quarter and the character scan is the rest. The scan is the single largest line item in the detector.
+At 4 KB of input the table build is two thirds of the first call. Inside `parse()` the trigram map costs more than
+the character scan, and both are shaped for it.
+
 The scan reads a flat table of the lowercase letter for every code point below U+0500, null for everything that is
 not a letter, which answers `isLetter()` and `toLower()` in one lookup; `QChar` answers above it. The table is
 built from `QChar` on first use, so no Unicode data is written out here. Its width covers Latin with its
 supplements and extensions, Greek and Cyrillic — every script the frequency tables have a language for. A table of
 only the 128 ASCII code points instead costs Cyrillic prose 6%: its branch flips at every word boundary.
 
+The map's key is the three code points packed into the low 48 bits of a `uint64`, hashed by splitmix64's
+finalizer. It is worth more than the scan table: `parse()` runs 2.1 to 2.5 times faster than with a key of three
+`QChar` hashed as six bytes, on every script measured.
+
 Per 128 K characters, the whole `decode()` call on the slow route:
 
-| input | `QChar` for every character | table first |
-| --- | --- | --- |
-| 1% Cyrillic clustered in a JSON host | 5.7 ms | 4.6 ms |
-| 5% Cyrillic interleaved into C source | 12.9 ms | 12.3 ms |
-| French prose, ISO-8859-1 | 15.9 ms | 15.0 ms |
-| Russian prose, Windows-1251 | 19.6 ms | 18.4 ms |
+| input | `decode()` |
+| --- | --- |
+| 1% Cyrillic clustered in a JSON host | 2.6 ms |
+| 5% Cyrillic interleaved into C source | 6.1 ms |
+| French prose, ISO-8859-1 | 7.4 ms |
+| Russian prose, Windows-1251 | 11.0 ms |
 
 A file mixed into an ASCII host is the most ASCII input that reaches detection at all — one with no non-ASCII byte
-is valid UTF-8, and `isUtf8()` answers it — and it gains a fifth of the whole call.
+is valid UTF-8, and `isUtf8()` answers it.
 
 ### The trigram container
 
 Both workloads, at 768 K characters. Build is insert-or-increment, what `parse()` does; lookup is `find()`
 against the baked model, what `cosineDistance()` does.
 
-| container | build, Trigram key | build, uint64 key | lookup, Trigram | lookup, uint64 |
+| container | build, 3 QChars | build, uint64 | lookup, 3 QChars | lookup, uint64 |
 | --- | --- | --- | --- | --- |
 | `boost::unordered_flat_map` | **3.21 ms** | **1.91 ms** | **65.9 µs** | **33.4 µs** |
 | `ankerl::unordered_dense` | 9.27 ms | 7.36 ms | 134 µs | 88.2 µs |
@@ -171,7 +175,8 @@ against the baked model, what `cosineDistance()` does.
 **Boost wins every cell by 2–4×**, which is unusual enough to be worth recording: `unordered_dense` normally
 matches or beats it. The sorted vector is not competitive on either workload, and neither is the flat-container
 approach of appending everything and sorting once. Packing the three `QChar` into a `uint64` is worth 1.7× on
-build and 2.0× on lookup.
+build and 2.0× on lookup here, and more than that inside `parse()`, where the key is produced in registers rather
+than read from a vector prepared outside the measured region.
 
 ## Findings: correctness
 
