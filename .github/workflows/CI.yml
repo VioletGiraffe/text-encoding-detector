@@ -36,17 +36,18 @@ jobs:
         git clone --depth 1 https://github.com/VioletGiraffe/cpputils ../cpputils
 
     # text-analyzer is built and not run: it is the tool that generates the trigram tables, and nothing else compiles it
+    # cmd's exit status is the last command's, so every command fails the step itself
     - name: Build on Windows
       if: startsWith(matrix.os, 'windows')
       shell: cmd
       run: |
         %QT_ROOT_DIR%\bin\qmake.exe -v
         cd tests
-        %QT_ROOT_DIR%\bin\qmake.exe -tp vc text-encoding-detector-tests.pro
-        msbuild text-encoding-detector-tests.vcxproj /t:Build /p:Configuration=Release
+        %QT_ROOT_DIR%\bin\qmake.exe -tp vc text-encoding-detector-tests.pro || exit /b 1
+        msbuild text-encoding-detector-tests.vcxproj /t:Build /p:Configuration=Release || exit /b 1
         cd ..\text-analyzer
-        %QT_ROOT_DIR%\bin\qmake.exe -tp vc text-analyzer.pro
-        msbuild text_analyzer.vcxproj /t:Build /p:Configuration=Release
+        %QT_ROOT_DIR%\bin\qmake.exe -tp vc text-analyzer.pro || exit /b 1
+        msbuild text_analyzer.vcxproj /t:Build /p:Configuration=Release || exit /b 1
 
     - name: Build on macOS
       if: startsWith(matrix.os, 'macos')
