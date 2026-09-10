@@ -70,8 +70,8 @@ CTrigramFrequencyTable_%2::CTrigramFrequencyTable_%2() noexcept
 static void printUsageInstructions()
 {
 	std::cout << "Usage:" << std::endl;
-	std::cout << "text_analyzer <language name> <path to a text file, or to a folder of .txt files>" << std::endl;
-	std::cout << "Text files must be encoded in UTF-8." << std::endl;
+	std::cout << "text_analyzer <language name> <path to a text file, or to a folder of .txt files> [minimum occurrences, default 10]" << std::endl;
+	std::cout << "Text files must be encoded in UTF-8. Trigrams seen fewer times than the minimum are left out of the table." << std::endl;
 	std::cout << std::endl;
 	std::cout << "Output: ctrigramfrequencytable_<Language name>.h and ctrigramfrequencytable_<Language name>.cpp source files in the working directory, containing the declaration and definition of the CTrigramFrequencyTable_<Language name> class." << std::endl;
 }
@@ -112,13 +112,14 @@ static void scanFolder(const QString& folderPath, CTextParser& parser)
 
 int main(int argc, char* argv[])
 {
-	if (argc != 3)
+	if (argc != 3 && argc != 4)
 	{
 		printUsageInstructions();
 		return -1;
 	}
 
 	const QString languageName(argv[1]);
+	const quint64 minimumOccurrences = argc == 4 ? QString{ argv[3] }.toULongLong() : 10;
 
 	CTextParser parser;
 	if (const QFileInfo input{ QString{ argv[2] } }; input.isFile())
@@ -148,16 +149,19 @@ int main(int argc, char* argv[])
 	QString constructorBody;
 	const QString constructorLineTemplate("\t\t{\"%1\", %2ULL, %3f},\n");
 
+	// All-ASCII trigrams are never scored: they decode the same under every 8-bit codec
 	std::vector<std::pair<QString, CTextParser::OccurrenceTable::Stats>> sortedTable;
 	for (const auto& pair : parser.parsingResult().trigramOccurrenceTable)
-		sortedTable.emplace_back(pair.first.toString(), pair.second);
+	{
+		if (pair.first.hasNonAsciiCharacter())
+			sortedTable.emplace_back(pair.first.toString(), pair.second);
+	}
 
 	// Sort from higher to lower occurrence
 	std::ranges::sort(sortedTable, std::greater<>(), [](const auto& pair) { return pair.second.rawCount; });
 
-	static constexpr quint64 Threshold = 10; // Ignore trigrams that occur less than this number of times
-	// The vector is now sorted, find where the count drops below the threshold and cut this tail (resize)
-	auto it = std::find_if(sortedTable.begin(), sortedTable.end(), [](const auto& pair) { return pair.second.rawCount < Threshold; });
+	// The vector is now sorted, find where the count drops below the minimum and cut this tail
+	auto it = std::find_if(sortedTable.begin(), sortedTable.end(), [minimumOccurrences](const auto& pair) { return pair.second.rawCount < minimumOccurrences; });
 	sortedTable.erase(it, sortedTable.end());
 
 	for (size_t i = 0, N = sortedTable.size(); i < N; ++i)

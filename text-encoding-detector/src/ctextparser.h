@@ -24,6 +24,11 @@ public:
 
 			inline bool constexpr operator==(const Trigram& other) const noexcept = default;
 
+			// An all-ASCII trigram decodes the same under every 8-bit codec and so cannot tell them apart
+			[[nodiscard]] inline bool hasNonAsciiCharacter() const noexcept {
+				return chars[0].unicode() >= 0x80 || chars[1].unicode() >= 0x80 || chars[2].unicode() >= 0x80;
+			}
+
 			std::array<QChar, 3> chars;
 		};
 

@@ -11,7 +11,6 @@ RESTORE_COMPILER_WARNINGS
 
 #include "ctextencodingdetector.h"
 #include "ctextparser.h"
-#include "trigramfrequencytables/ctrigramfrequencytable_english.h"
 #include "trigramfrequencytables/ctrigramfrequencytable_french.h"
 #include "trigramfrequencytables/ctrigramfrequencytable_german.h"
 #include "trigramfrequencytables/ctrigramfrequencytable_polish.h"
@@ -176,17 +175,16 @@ TEST_CASE("detect(): the work it repeats per codec", "[!benchmark]")
 TEST_CASE("detect(): the frequency tables it builds once", "[!benchmark]")
 {
 	// The tables are built on the first detect() call and kept: this is what that call pays over the rest
-	BENCHMARK("all six frequency tables, constructed")
+	BENCHMARK("all five frequency tables, constructed")
 	{
-		const CTrigramFrequencyTable_English english;
 		const CTrigramFrequencyTable_French french;
 		const CTrigramFrequencyTable_German german;
 		const CTrigramFrequencyTable_Polish polish;
 		const CTrigramFrequencyTable_Russian russian;
 		const CTrigramFrequencyTable_Spanish spanish;
-		return english.trigramOccurrenceTable().totalTrigramsCount + french.trigramOccurrenceTable().totalTrigramsCount
-			+ german.trigramOccurrenceTable().totalTrigramsCount + polish.trigramOccurrenceTable().totalTrigramsCount
-			+ russian.trigramOccurrenceTable().totalTrigramsCount + spanish.trigramOccurrenceTable().totalTrigramsCount;
+		return french.trigramOccurrenceTable().totalTrigramsCount + german.trigramOccurrenceTable().totalTrigramsCount
+			+ polish.trigramOccurrenceTable().totalTrigramsCount + russian.trigramOccurrenceTable().totalTrigramsCount
+			+ spanish.trigramOccurrenceTable().totalTrigramsCount;
 	};
 }
 

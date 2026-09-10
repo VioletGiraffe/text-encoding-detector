@@ -1,5 +1,4 @@
 #include "ctextencodingdetector.h"
-#include "trigramfrequencytables/ctrigramfrequencytable_english.h"
 #include "trigramfrequencytables/ctrigramfrequencytable_french.h"
 #include "trigramfrequencytables/ctrigramfrequencytable_german.h"
 #include "trigramfrequencytables/ctrigramfrequencytable_polish.h"
@@ -67,6 +66,9 @@ bool isUtf8(const QByteArray& data)
 	return totalLoss / static_cast<double>(totalCount);
 }
 
+// Only the trigrams with a non-ASCII character count, on both sides: the ASCII ones decode the same under every
+// codec and would only dilute. A reading that turns the non-ASCII into replacement characters keeps no trigram
+// at all and scores 1.0; one that maps it to the wrong letters keeps trigrams the table has never seen.
 [[nodiscard]] inline double cosineDistance(const CTrigramFrequencyTable_Base& model, const CTextParser::OccurrenceTable& sample) noexcept
 {
 	const double unknownPenaltyWeight = 0.0; // Adjust this weight to control the penalty for unknown trigrams
@@ -81,6 +83,9 @@ bool isUtf8(const QByteArray& data)
 
 	for (const auto& [trigram, sampleStats] : sample.trigramOccurrenceTable)
 	{
+		if (!trigram.hasNonAsciiCharacter())
+			continue;
+
 		const double sampleCount = static_cast<double>(sampleStats.rawCount);
 		sampleNormSq += sampleCount * sampleCount;
 		sampleTotalCount += sampleCount;
@@ -116,12 +121,12 @@ inline bool contains(const Container& container, const Value& value)
 	return std::ranges::find(container, value) != container.end();
 }
 
-// Read-only once built, so one instance serves every call from every thread
+// Read-only once built, so one instance serves every call from every thread.
+// No English table: its trigrams would all be ASCII, which scoring ignores, and pure ASCII never reaches detect().
 [[nodiscard]] static const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& defaultLanguageTables()
 {
 	static const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>> tables = [] {
 		std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>> built;
-		built.push_back(std::make_unique<CTrigramFrequencyTable_English>());
 		built.push_back(std::make_unique<CTrigramFrequencyTable_French>());
 		built.push_back(std::make_unique<CTrigramFrequencyTable_German>());
 		built.push_back(std::make_unique<CTrigramFrequencyTable_Polish>());

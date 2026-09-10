@@ -12,11 +12,15 @@ Each work is split in two. `corpus/test/` is a prefix the tests, benchmarks and 
 the remainder, which `text-analyzer` builds the trigram tables from. Nothing the tests score has been seen by
 a table — scoring text against tables built from that same text would flatter every number here.
 
-The tables are regenerated from the tables directory, one language at a time:
+There are five tables, not six: an English one would hold only all-ASCII trigrams, which scoring ignores (see
+finding 13), and pure ASCII never reaches `detect()`. English's test prefix is the ASCII host of the study.
+
+The tables are regenerated from the tables directory, one language at a time; the optional last argument is
+the minimum occurrence count a trigram needs to be kept (default 10):
 
 ```
 cd text-encoding-detector/src/trigramfrequencytables
-text_analyzer French ../../../corpus/train/french.txt
+text_analyzer French ../../../corpus/train/french.txt 10
 ```
 
 Committed rather than generated, for two reasons found the hard way:
@@ -100,15 +104,15 @@ NUL byte — runs the full detection.
 | input | 64 KB | 256 KB | 1.3 MB |
 | --- | --- | --- | --- |
 | valid UTF-8 | 580 µs | 2.40 ms | 7.65 ms |
-| Windows-1251, six language tables | 9.71 ms | 35.0 ms | — |
+| Windows-1251, five language tables | 9.01 ms | 31.9 ms | — |
 | binary on the slow route (the test executable, measured before the guard) | 17.0 ms | 58.3 ms | — |
 
-**Roughly 5.6 ms per MB on the fast route against ~140 ms per MB on the slow one.** Binary is worse than text,
+**Roughly 5.6 ms per MB on the fast route against ~130 ms per MB on the slow one.** Binary is worse than text,
 because garbage produces more distinct trigrams than language does; the guard stops anything with a NUL byte
 at that byte, and the row above is what a binary file without one still costs.
 
-Going from two language tables to six added ~3 ms at 256 KB: each table is one more scoring pass per codec,
-and the model's own norm is precomputed at construction so a pass costs only the sample's lookups.
+Each language table is one more scoring pass per codec; the model's own norm is precomputed at construction,
+and only the sample's non-ASCII trigrams are looked up, so a pass is cheap next to `parse()`.
 
 Where the slow route's time goes, per codec, at 256 KB — and `detect()` tries about a dozen:
 
@@ -117,7 +121,7 @@ Where the slow route's time goes, per codec, at 256 KB — and `detect()` tries 
 | `parse()` | 3.78 ms | 88% |
 | codec decode | 460 µs | 11% |
 | dedup hash | 44 µs | 1% |
-| all six frequency tables, built once per process | 1.63 ms | first call only |
+| all five frequency tables, built once per process | 0.60 ms | first call only |
 
 At 4 KB of input the table build is two thirds of the first call. Inside `parse()`, the hash map is about a
 quarter and the character scan — `isLetter()` plus `toLower()`, two Unicode table lookups per character — is
@@ -219,22 +223,37 @@ into a replacement character — so the whole-text cosine of the right reading a
 about the share of trigrams that carry an accent. Russian margins remain 0.4–0.8. A gate at 0.2 would reject
 every correct Western European answer. Finding 8 was also a Russian result.
 
-### Where this leaves the design
+**13. Scoring only the trigrams that carry a non-ASCII character fixes all of it.** The filter of finding 6,
+applied at the trigram instead of the byte: `cosineDistance()` skips every all-ASCII sample trigram, and the
+table's norm is precomputed over its non-ASCII trigrams alone. A trigram spanning an accent keeps its ASCII
+neighbours, so it is one the table has seen; a reading that mangles the accent into a replacement character
+keeps no trigram at all and scores 1.0; one that maps it to the wrong letter keeps trigrams no table has. The
+host contributes nothing under any codec, and the English table never wins, which is right — pure ASCII never
+reaches `detect()`.
 
-Both halves of the earlier design — drop the ASCII bytes, gate on the margin — hold for Russian only. What
-they got right is the diagnosis: ASCII contributes equal mass to every candidate and only dilutes. What they
-got wrong is the level: bytes. The candidate replacement is the same filter one level up, **at the trigram**:
+With it, **whole-file detection is correct on all 140 scenarios**. The score now tracks the share of prose,
+not the host or the shape: French 0.06 pure, 0.17 at 20%, 0.33 at 5%, 0.66 at 1%, and the same three numbers
+whether the host is English, C or JSON. Polish at 1% is the highest at 0.81, still under the 0.95 threshold.
+Margins are 0.07–0.48 for the Western European languages, 0.66–0.81 for Polish; no gate is needed, since
+nothing is wrong, and none would be safe at German's 0.07.
 
-1. Score only the trigrams that contain at least one non-ASCII character — in the sample, and in the model's
-   norm. A trigram spanning an accent keeps its ASCII neighbours, so it is one the table has seen.
-2. Under that rule a reading that mangles the non-ASCII into replacement characters keeps *no* trigrams and
-   scores 1.0; a reading that maps them to the wrong letters keeps trigrams the table has never seen. The host
-   contributes nothing whichever codec is tried.
-3. The English table then never wins anything, which is correct: English is not an encoding question, and pure
-   ASCII never reaches `detect()`.
+The 64 KB anchored sample — 128-byte chunks centred on non-ASCII bytes — is also correct on all 140, at a
+constant cost. Blind prefix and spread samples are never wrong any more either: a sample with no non-ASCII
+byte has nothing to score and is declined, which is the honest answer for a sample that cannot know.
 
-Unmeasured. It changes `cosineDistance()` and the table's precomputed norm, so it is a library change, and it
-can be prototyped in the study first by scoring outside the library.
+**14. The tables hold only what scoring reads, and the occurrence cut does not matter.** `text-analyzer` now
+leaves out all-ASCII trigrams, which under finding 13 were inert rows: the Western European tables were 80–90%
+of them, and the English table entirely — it is gone, since English is not an encoding question and pure ASCII
+never reaches `detect()`. The minimum occurrence count a trigram needs to be kept was swept at 10, 5, 2 and 1:
+every score and margin in the study moved by 0.01 or less, while the tables grew three- to four-fold. Counts
+weight the cosine, and a trigram seen twice weighs nothing beside one seen a thousand times. The cut stays at 10.
+
+### The design these point to
+
+1. Score only trigrams carrying a non-ASCII character — done, in the library.
+2. Sample by anchoring fixed-size chunks on the non-ASCII bytes, at a bounded budget, so the cost stops being
+   ~140 ms per MB. Not yet in the library; `decode()` still reads the whole file.
+3. Return nothing when the sample holds nothing to score, which the threshold already does.
 
 ## What the corpus changed
 
@@ -259,7 +278,9 @@ and a synthetic input that is wrong in a way you have not thought of returns a c
 - The NUL guard is broad both ways: a NUL-terminated text file is declined, and a binary file without a NUL
   byte still runs the full detection.
 - The text viewer's explicit "as UTF-8" action does not use the binary guard.
-- The regenerated tables are thinner than the originals: English 3,520 entries against 17,549, Russian 6,006
-  against 14,662, the originals coming from training sets several times larger. Whether that costs accuracy
-  is for the study to say, by pulling the original tables from git history and scoring both sets — once the
-  study covers mixed files well enough for the comparison to mean something.
+- The regenerated Russian table has 5,965 entries against the original's 14,662, which came from a training
+  set several times larger. Whether that costs accuracy is for the study to say, by pulling the original table
+  from git history and scoring both. The occurrence sweep of finding 14 suggests not: what the extra entries
+  would add is the long tail, which the cosine barely weighs.
+- The study's "non-ASCII only" columns measure the byte-level filter of finding 10, which is dead by design,
+  and the context sweep answered its question. Both are due for removal.

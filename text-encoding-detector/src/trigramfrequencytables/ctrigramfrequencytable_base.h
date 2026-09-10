@@ -16,7 +16,8 @@ public:
 
 	[[nodiscard]] const CTextParser::OccurrenceTable& trigramOccurrenceTable() const noexcept { return _table; }
 
-	// The model's half of a cosine similarity: a constant of the table, and the tables are large
+	// The model's half of a cosine similarity, over the trigrams scoring considers: those with a non-ASCII character.
+	// A constant of the table, and the tables are large.
 	[[nodiscard]] double countsNormSquared() const noexcept { return _countsNormSquared; }
 
 	[[nodiscard]] virtual QString language() const = 0;
@@ -25,8 +26,11 @@ private:
 	[[nodiscard]] static double sumOfSquaredCounts(const CTextParser::OccurrenceTable& table) noexcept
 	{
 		double sum = 0.0;
-		for (const auto& [_, stats] : table.trigramOccurrenceTable)
+		for (const auto& [trigram, stats] : table.trigramOccurrenceTable)
 		{
+			if (!trigram.hasNonAsciiCharacter())
+				continue;
+
 			const double count = static_cast<double>(stats.rawCount);
 			sum += count * count;
 		}

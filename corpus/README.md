@@ -7,7 +7,9 @@ happen to be on disk is not reproducible between machines.
 Each work is split in two, and the two halves never meet:
 
 - `test/<language>.txt` - a prefix of the work, read by the tests, benchmarks and the window study
-- `train/<language>.txt` - the remainder, which `text-analyzer` builds that language's trigram table from
+- `train/<language>.txt` - the remainder, which `text-analyzer` builds that language's trigram table from.
+  English has no table: its trigrams are all ASCII, which the detector does not score, so `train/english.txt`
+  is unused and kept only for the split's uniformity.
 
 All files are UTF-8 without a byte order mark. The tests re-encode them in memory into whichever 8-bit codec a
 case calls for, so each file must survive that encoding unchanged - see the normalization note below.
@@ -80,9 +82,10 @@ pwsh ./prepare_corpus.ps1 -CodeSource <sqlite3.c> -JsonSource <log>   # and the 
 ```
 
 The trigram tables are regenerated from the training halves, one language per run, from the directory the
-generated files live in:
+generated files live in. The optional last argument is the minimum occurrence count a trigram needs to be
+kept, 10 by default; all-ASCII trigrams are left out regardless:
 
 ```
 cd ../text-encoding-detector/src/trigramfrequencytables
-text_analyzer French ../../../corpus/train/french.txt
+text_analyzer French ../../../corpus/train/french.txt 10
 ```
