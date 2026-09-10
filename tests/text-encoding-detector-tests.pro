@@ -13,7 +13,12 @@ greaterThan(QT_MAJOR_VERSION, 5) {
 
 DEFINES += CATCH_CONFIG_ENABLE_BENCHMARKING
 
-include(../../global.pri)
+# The parent's global.pri where this repo is a submodule; a standalone build (CI) restates the one flag from it that matters here
+exists(../../global.pri) {
+	include(../../global.pri)
+} else {
+	win*:QMAKE_CXXFLAGS += /utf-8
+}
 
 CONFIG(debug, debug|release) {
 	OUTPUT_DIR=debug
@@ -29,6 +34,7 @@ OBJECTS_DIR = $$PWD/build/$${OUTPUT_DIR}
 win* {
 	QMAKE_CXXFLAGS += /MP /Zi /FS /std:c++latest /permissive- /Zc:__cplusplus
 	QMAKE_CXXFLAGS_WARN_ON = /W4
+	DEFINES += WIN32_LEAN_AND_MEAN NOMINMAX
 
 	# /OPT:REF and /OPT:ICF default to on only while /DEBUG is absent, so they must be restated alongside it.
 	# FULL rather than FASTLINK: a fastlink PDB is unusable to external profilers.
@@ -42,12 +48,11 @@ linux* | mac* | freebsd {
 INCLUDEPATH += \
 	$$PWD/../text-encoding-detector/src \
 	$$PWD/../../cpputils \
-	$$PWD/../../qtutils \
 	$$PWD/../../cpp-template-utils \
 	$$PWD/../../cpp-template-utils/3rdparty
 
-# The committed corpus the tests, benchmarks and study all read; see corpus/README.md
-DEFINES += CORPUS_DIR=\\\"$$PWD/corpus\\\"
+# The committed corpus the tests, benchmarks and study all read; see ../corpus/README.md
+DEFINES += CORPUS_DIR=\\\"$$PWD/../corpus\\\"
 
 HEADERS += \
 	benchmark_corpus.h

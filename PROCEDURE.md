@@ -5,8 +5,9 @@ i5-12600K, Release, Qt 6.11.1.
 
 ## The corpus
 
-`tests/corpus/` holds real prose in six languages, ~4.2 MB, committed. `tests/corpus/README.md` lists sources
-and per-file counts; `prepare_corpus.ps1` rebuilds them and reproduces the committed bytes exactly.
+`corpus/` holds real prose in six languages, ~4.2 MB, committed. `corpus/README.md` lists sources and
+per-file counts; `prepare_corpus.ps1` rebuilds them and reproduces the committed bytes exactly. It sits at the
+repo root because it is the input to `text-analyzer` as much as to the tests.
 
 Committed rather than generated, for two reasons found the hard way:
 
@@ -50,6 +51,10 @@ text-encoding-detector-tests                                              # test
 text-encoding-detector-tests "[!benchmark]" -r fastest --benchmark-no-analysis
 text-encoding-detector-tests "[study]"
 ```
+
+CI (`.github/workflows/CI.yml`) builds the tests and `text-analyzer` on Windows, Linux and macOS, runs the
+tests, and runs the benchmarks with a handful of samples as a smoke test only: a shared runner's timings are
+not comparable to the numbers below.
 
 Benchmarks and the study are hidden behind tags, so a plain run stays fast. The benchmark reporter is
 `cpp-template-utils/tests/catch_benchmark_reporter.hpp`, which reports the mean of the fastest third of the
@@ -215,4 +220,4 @@ and a synthetic input that is wrong in a way you have not thought of returns a c
   byte still runs the full detection.
 - The text viewer's explicit "as UTF-8" action does not use the binary guard.
 - The committed tables were baked with the seed-loop `parse()` of finding 1, from a corpus that is not recorded.
-  Regenerating them from `tests/corpus/` is what makes French and German tables possible.
+  Regenerating them from `corpus/` is what makes French and German tables possible.

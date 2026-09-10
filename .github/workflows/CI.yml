@@ -1,0 +1,100 @@
+name: CI
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  test:
+    name: Build and test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: 6.10.*
+        target: desktop
+        archives: 'qtbase icu'
+        modules: 'qt5compat'  # QTextCodec
+
+    - name: Set up MSVC environment
+      if: startsWith(matrix.os, 'windows')
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
+    # The .pro files expect the sibling repos beside this one, the layout of a file-commander checkout
+    - name: Checkout dependencies
+      run: |
+        git clone --depth 1 https://github.com/VioletGiraffe/cpp-template-utils ../cpp-template-utils
+        git clone --depth 1 https://github.com/VioletGiraffe/cpputils ../cpputils
+
+    # text-analyzer is built and not run: it is the tool that generates the trigram tables, and nothing else compiles it
+    - name: Build on Windows
+      if: startsWith(matrix.os, 'windows')
+      shell: cmd
+      run: |
+        %QT_ROOT_DIR%\bin\qmake.exe -v
+        cd tests
+        %QT_ROOT_DIR%\bin\qmake.exe -tp vc text-encoding-detector-tests.pro
+        msbuild text-encoding-detector-tests.vcxproj /t:Build /p:Configuration=Release
+        cd ..\text-analyzer
+        %QT_ROOT_DIR%\bin\qmake.exe -tp vc text-analyzer.pro
+        msbuild text_analyzer.vcxproj /t:Build /p:Configuration=Release
+
+    - name: Build on macOS
+      if: startsWith(matrix.os, 'macos')
+      run: |
+        clang --version
+        cd tests
+        $QT_ROOT_DIR/bin/qmake text-encoding-detector-tests.pro -config release CONFIG+=release
+        make -j$(sysctl -n hw.ncpu)
+        cd ../text-analyzer
+        $QT_ROOT_DIR/bin/qmake text-analyzer.pro -config release CONFIG+=release
+        make -j$(sysctl -n hw.ncpu)
+
+    - name: Build on Linux
+      if: startsWith(matrix.os, 'ubuntu')
+      run: |
+        sudo apt update -y
+        sudo apt install -qq gcc-14 g++-14
+        sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 50
+        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 50
+        g++ --version
+        cd tests
+        $QT_ROOT_DIR/bin/qmake text-encoding-detector-tests.pro -config release CONFIG+=release
+        make -j$(nproc)
+        cd ../text-analyzer
+        $QT_ROOT_DIR/bin/qmake text-analyzer.pro -config release CONFIG+=release
+        make -j$(nproc)
+
+    - name: Run tests on Windows
+      if: startsWith(matrix.os, 'windows')
+      run: ./tests/bin/release/text-encoding-detector-tests.exe
+
+    - name: Run tests on macOS
+      if: startsWith(matrix.os, 'macos')
+      run: ./tests/bin/release/text-encoding-detector-tests.app/Contents/MacOS/text-encoding-detector-tests
+
+    - name: Run tests on Linux
+      if: startsWith(matrix.os, 'ubuntu')
+      run: ./tests/bin/release/text-encoding-detector-tests
+
+    # A smoke run of the benchmarks so they keep compiling and running; a shared runner's timings are not the record, PROCEDURE.md is
+    - name: Run benchmarks on Windows
+      if: startsWith(matrix.os, 'windows')
+      run: ./tests/bin/release/text-encoding-detector-tests.exe "[!benchmark]" --benchmark-samples 5 --benchmark-no-analysis
+
+    - name: Run benchmarks on macOS
+      if: startsWith(matrix.os, 'macos')
+      run: ./tests/bin/release/text-encoding-detector-tests.app/Contents/MacOS/text-encoding-detector-tests "[!benchmark]" --benchmark-samples 5 --benchmark-no-analysis
+
+    - name: Run benchmarks on Linux
+      if: startsWith(matrix.os, 'ubuntu')
+      run: ./tests/bin/release/text-encoding-detector-tests "[!benchmark]" --benchmark-samples 5 --benchmark-no-analysis

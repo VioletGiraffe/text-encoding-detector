@@ -26,7 +26,6 @@ UI_DIR      = ../../build/$${OUTPUT_DIR}/$${TARGET}
 RCC_DIR     = ../../build/$${OUTPUT_DIR}/$${TARGET}
 
 INCLUDEPATH += \
-	../../qtutils \
 	../../cpputils \
 	../../cpp-template-utils \
 	../../cpp-template-utils/3rdparty
