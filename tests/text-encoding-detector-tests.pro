@@ -55,7 +55,8 @@ INCLUDEPATH += \
 DEFINES += CORPUS_DIR=\\\"$$PWD/../corpus\\\"
 
 HEADERS += \
-	benchmark_corpus.h
+	benchmark_corpus.h \
+	mixed_content_scenarios.h
 
 SOURCES += \
 	main.cpp \
@@ -63,6 +64,7 @@ SOURCES += \
 	ctextencodingdetector_tests.cpp \
 	ctextencodingdetector_benchmarks.cpp \
 	detection_window_study.cpp \
+	mixed_content_scenarios.cpp \
 	trigram_container_benchmarks.cpp
 
 include(../text-encoding-detector/text-encoding-detector.pri)

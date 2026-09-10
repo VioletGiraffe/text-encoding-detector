@@ -45,6 +45,10 @@ Gutenberg supplies five languages. It cannot supply Russian: of its nine Russian
 are audiobooks with no text, leaving an arithmetic textbook and 18th-century odes. Russian comes from a local
 copy of *Anna Karenina*, passed in with `-RussianSource`.
 
+Russian also has a second author, test-only: Kuprin's *Поединок*, fetched from Wikisource at pinned page
+revisions. The Tolstoy test prefix shows what the Russian table was fit to; Kuprin shows what it generalizes to
+(finding 16 measured that on texts that cannot be committed).
+
 ## The test project
 
 `tests/` is a Catch2 project built the way `image-processing/tests` is. Add `CONFIG+=build_tests` to the qmake
@@ -53,7 +57,8 @@ run, or open `tests/text-encoding-detector-tests.pro` directly.
 | file | what it holds |
 | --- | --- |
 | `benchmark_corpus.{h,cpp}` | the corpus: decoding, slicing, encoding into a named codec |
-| `ctextencodingdetector_tests.cpp` | correctness, including the corpus contract |
+| `mixed_content_scenarios.{h,cpp}` | each language whole and mixed into three hosts at three shares in three shapes |
+| `ctextencodingdetector_tests.cpp` | correctness: the corpus contract, and `decode()` over every language, the second author and every mixed-content scenario, with the winning score capped at 0.90 |
 | `ctextencodingdetector_benchmarks.cpp` | what `decode()` costs and where the cost goes |
 | `trigram_container_benchmarks.cpp` | the trigram table's container and key shape |
 | `detection_window_study.cpp` | how little of a file detection can read and still be right |
@@ -70,7 +75,8 @@ CI (`.github/workflows/CI.yml`) builds the tests and `text-analyzer` on Windows,
 tests, and runs the benchmarks with a handful of samples as a smoke test only: a shared runner's timings are
 not comparable to the numbers below.
 
-Benchmarks and the study are hidden behind tags, so a plain run stays fast. The benchmark reporter is
+Benchmarks and the study are hidden behind tags; a plain run is the mixed-content matrix, whole files, about
+nine seconds on the machine below. The benchmark reporter is
 `cpp-template-utils/tests/catch_benchmark_reporter.hpp`, which reports the mean of the fastest third of the
 samples — interference only ever adds time, so the fastest samples are the honest ones.
 

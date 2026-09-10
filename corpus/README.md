@@ -1,8 +1,8 @@
 # Corpus
 
-Real prose in six languages, one work each, committed rather than generated: text drawn from the trigram
-tables and then scored against those same tables flatters the detector, and text walked from whatever files
-happen to be on disk is not reproducible between machines.
+Real prose in six languages, committed rather than generated: text drawn from the trigram tables and then
+scored against those same tables flatters the detector, and text walked from whatever files happen to be on
+disk is not reproducible between machines.
 
 Each work is split in two, and the two halves never meet:
 
@@ -10,6 +10,9 @@ Each work is split in two, and the two halves never meet:
 - `train/<language>.txt` - the remainder, which `text-analyzer` builds that language's trigram table from.
   English has no table: its trigrams are all ASCII, which the detector does not score, so `train/english.txt`
   is unused and kept only for the split's uniformity.
+
+A second work in a language, by an author the table was not built from, is test only: the table's test prefix
+shows what it was fit to, the second author what it generalizes to. Russian has one.
 
 All files are UTF-8 without a byte order mark. The tests re-encode them in memory into whichever 8-bit codec a
 case calls for, so each file must survive that encoding unchanged - see the normalization note below.
@@ -22,9 +25,10 @@ case calls for, so each file must survive that encoding unchanged - see the norm
 | Spanish | 200,000 | 600,000 | 2.09% | ISO-8859-1 | *Don Quijote*, Cervantes, [PG 2000](https://www.gutenberg.org/ebooks/2000) |
 | Polish | 24,000 | 216,484 | 6.81% | ISO-8859-2 | *Tajemnica Baskerville'ów*, Conan Doyle, tr. Żmijewska, [PG 34079](https://www.gutenberg.org/ebooks/34079) |
 | Russian | 800,000 | 912,686 | 78.08% | Windows-1251, KOI8-R, CP866 | *Anna Karenina*, Tolstoy, supplied locally |
+| Russian, second author (`russian-kuprin.txt`) | 440,115 | none | 78.86% | Windows-1251, KOI8-R, CP866 | *Поединок*, Kuprin, [Wikisource](https://ru.wikisource.org/wiki/Поединок_(Куприн)) |
 
-Two more test-only files are *hosts*: ASCII text the window study sprinkles the languages into, alongside the
-English prose. No table is built from them, and they must hold no non-ASCII byte at all.
+Two more test-only files are *hosts*: ASCII text the mixed-content scenarios sprinkle the languages into,
+alongside the English prose. No table is built from them, and they must hold no non-ASCII byte at all.
 
 | file | chars | source |
 | --- | --- | --- |
@@ -44,11 +48,16 @@ them are audiobooks carrying no text, leaving an arithmetic textbook and 18th-ce
 modern Russian prose closely enough to draw trigram statistics from. *Anna Karenina* is supplied locally
 instead, and `prepare_corpus.ps1` leaves the russian files alone unless pointed at that source.
 
+*Поединок* comes from Wikisource, one page per chapter. The pages stay editable, so the script fetches each at
+a pinned revision and strips the wiki markup: the page header, the editors' footnotes, stress marks, formatting
+templates and tags.
+
 ## Licence
 
 The five Project Gutenberg works are in the public domain in the United States, which is the basis on which PG
 distributes them. The PG wrapper around each is not public domain and is stripped, leaving the work itself.
-*Anna Karenina* was published in 1878 and is likewise public domain.
+*Anna Karenina* was published in 1878 and is likewise public domain. *Поединок* was published in 1905 and its
+author died in 1938; Wikisource hosts it as public domain (life plus 70 years).
 
 ## Normalization
 
@@ -76,7 +85,7 @@ where a single non-ASCII character would be a false anchor for a sampler that se
 byte. It fails rather than writing a file that cannot survive its target codecs.
 
 ```
-pwsh ./prepare_corpus.ps1                                             # the Gutenberg five
+pwsh ./prepare_corpus.ps1                                             # the Gutenberg five and the Wikisource one
 pwsh ./prepare_corpus.ps1 -RussianSource <path>                       # and the russian files
 pwsh ./prepare_corpus.ps1 -CodeSource <sqlite3.c> -JsonSource <log>   # and the hosts
 ```

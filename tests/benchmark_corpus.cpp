@@ -33,6 +33,17 @@ const std::array hostFiles {
 	CorpusFile{ "json", "json.txt", {} },
 };
 
+struct OtherAuthorFile
+{
+	const char* name;
+	const char* fileName;
+	BenchmarkCorpus::Language language;
+};
+
+const std::array otherAuthorFiles {
+	OtherAuthorFile{ "kuprin", "russian-kuprin.txt", BenchmarkCorpus::Language::Russian },
+};
+
 [[nodiscard]] const CorpusFile& fileFor(BenchmarkCorpus::Language language)
 {
 	return corpusFiles[static_cast<size_t>(language)];
@@ -41,6 +52,11 @@ const std::array hostFiles {
 [[nodiscard]] const CorpusFile& fileFor(BenchmarkCorpus::Host host)
 {
 	return hostFiles[static_cast<size_t>(host)];
+}
+
+[[nodiscard]] const OtherAuthorFile& fileFor(BenchmarkCorpus::OtherAuthor author)
+{
+	return otherAuthorFiles[static_cast<size_t>(author)];
 }
 
 [[nodiscard]] QString readTestFile(const char* fileName)
@@ -74,6 +90,16 @@ const char* BenchmarkCorpus::name(Host host)
 	return fileFor(host).name;
 }
 
+const char* BenchmarkCorpus::name(OtherAuthor author)
+{
+	return fileFor(author).name;
+}
+
+BenchmarkCorpus::Language BenchmarkCorpus::language(OtherAuthor author)
+{
+	return fileFor(author).language;
+}
+
 std::vector<const char*> BenchmarkCorpus::codecNames(Language language)
 {
 	return fileFor(language).codecNames;
@@ -93,33 +119,55 @@ const QString& BenchmarkCorpus::text(Host host)
 	return cachedText(decoded, loaded, static_cast<size_t>(host), fileFor(host).fileName);
 }
 
-QString BenchmarkCorpus::slice(Language language, qsizetype characters)
+const QString& BenchmarkCorpus::text(OtherAuthor author)
 {
-	QString sliced = text(language).left(characters);
-	if (!sliced.isEmpty() && sliced.back().isHighSurrogate()) // A lone surrogate encodes as a replacement character
+	static std::array<QString, std::size(otherAuthorFiles)> decoded;
+	static std::array<bool, std::size(otherAuthorFiles)> loaded{};
+	return cachedText(decoded, loaded, static_cast<size_t>(author), fileFor(author).fileName);
+}
+
+QString BenchmarkCorpus::slice(const QString& text, qsizetype characters)
+{
+	QString sliced = text.left(characters);
+	if (!sliced.isEmpty() && sliced.back().isHighSurrogate())
 		sliced.chop(1);
 
 	return sliced;
 }
 
-QByteArray BenchmarkCorpus::encoded(Language language, const char* codecName, qsizetype characters)
+QString BenchmarkCorpus::slice(Language language, qsizetype characters)
+{
+	return slice(text(language), characters);
+}
+
+QByteArray BenchmarkCorpus::encoded(const QString& text, const char* codecName)
 {
 	QTextCodec* const codec = QTextCodec::codecForName(codecName);
 	if (!codec)
 		return {};
 
 	const std::unique_ptr<QTextEncoder> encoder{ codec->makeEncoder(QTextCodec::IgnoreHeader) };
-	return encoder->fromUnicode(slice(language, characters));
+	return encoder->fromUnicode(text);
 }
 
-QString BenchmarkCorpus::representable(Language language, const char* codecName, qsizetype characters)
+QByteArray BenchmarkCorpus::encoded(Language language, const char* codecName, qsizetype characters)
+{
+	return encoded(slice(language, characters), codecName);
+}
+
+QString BenchmarkCorpus::representable(const QString& text, const char* codecName)
 {
 	QTextCodec* const codec = QTextCodec::codecForName(codecName);
 	if (!codec)
 		return {};
 
 	const std::unique_ptr<QTextDecoder> decoder{ codec->makeDecoder(QTextCodec::IgnoreHeader) };
-	return decoder->toUnicode(encoded(language, codecName, characters));
+	return decoder->toUnicode(encoded(text, codecName));
+}
+
+QString BenchmarkCorpus::representable(Language language, const char* codecName, qsizetype characters)
+{
+	return representable(slice(language, characters), codecName);
 }
 
 QByteArray BenchmarkCorpus::executableBytes(qsizetype bytes)
