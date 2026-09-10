@@ -46,10 +46,8 @@ INCLUDEPATH += \
 	$$PWD/../../cpp-template-utils \
 	$$PWD/../../cpp-template-utils/3rdparty
 
-# The benchmarks need a text of several MB, which the repository does not carry. This points at the analyzer's
-# corpus folder; TEXT_ENCODING_DETECTOR_CORPUS and TEXT_ENCODING_DETECTOR_CORPUS_CODEC override it at run time,
-# and the cases that need it report themselves skipped where it is absent.
-DEFINES += DEFAULT_CORPUS_FILE=\\\"$$PWD/../text-encoding-detector/src/trigramfrequencytables/1/BEZOP.TXT\\\"
+# The committed corpus the tests, benchmarks and study all read; see corpus/README.md
+DEFINES += CORPUS_DIR=\\\"$$PWD/corpus\\\"
 
 HEADERS += \
 	benchmark_corpus.h
@@ -59,6 +57,7 @@ SOURCES += \
 	benchmark_corpus.cpp \
 	ctextencodingdetector_tests.cpp \
 	ctextencodingdetector_benchmarks.cpp \
+	detection_window_study.cpp \
 	trigram_container_benchmarks.cpp
 
 include(../text-encoding-detector/text-encoding-detector.pri)

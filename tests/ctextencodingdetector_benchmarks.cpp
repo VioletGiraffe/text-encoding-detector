@@ -41,16 +41,19 @@ RESTORE_COMPILER_WARNINGS
 
 namespace {
 
-// A log ladder: these numbers exist to place a size threshold, and a linear ladder would spend most of its
-// points in the range that is already too slow to choose.
-constexpr qsizetype characterCounts[] = { 4 * 1024, 16 * 1024, 64 * 1024, 256 * 1024, 1024 * 1024, 4 * 1024 * 1024 };
+// Russian, the language whose encodings this library can actually tell apart
+constexpr auto corpusLanguage = BenchmarkCorpus::Language::Russian;
+
+// A log ladder up to the corpus length: these numbers exist to place a size threshold, and a linear ladder
+// would spend most of its points in the range that is already too slow to choose.
+constexpr qsizetype characterCounts[] = { 4 * 1024, 16 * 1024, 64 * 1024, 256 * 1024, 768 * 1024 };
 
 // Representative of the whole shortlist: one Cyrillic 8-bit codec, and the single-byte decode loop is the same for all of them
 constexpr const char* eightBitCodecName = "Windows-1251";
 
 // detect() is linear in the input with a large constant, and Catch2 runs a case many times over: past this
 // length a single case costs minutes.
-constexpr qsizetype maxCharactersForDetect = 1024 * 1024;
+constexpr qsizetype maxCharactersForDetect = 256 * 1024;
 
 [[nodiscard]] std::string sizeLabel(qsizetype characters, qsizetype bytes)
 {
@@ -62,34 +65,25 @@ constexpr qsizetype maxCharactersForDetect = 1024 * 1024;
 	return std::string{ what } + ", " + codecName + ", " + sizeLabel(characters, bytes);
 }
 
-// True where the corpus is missing or too short for this length, having reported a missing corpus once
+// The corpus is committed, so this only ever fires if the ladder outgrows it
 [[nodiscard]] bool skipped(qsizetype characters)
 {
-	if (!BenchmarkCorpus::text().isEmpty())
-		return BenchmarkCorpus::text().size() < characters;
-
-	static bool reported = false;
-	if (!reported)
-	{
-		reported = true;
-		WARN(BenchmarkCorpus::missingCorpusMessage());
-	}
-
-	return true;
+	return BenchmarkCorpus::text(corpusLanguage).size() < characters;
 }
 
-// Every codec but UTF-8 leaves decode() with no shortcut to take, and detect() then runs in full
+// Only an 8-bit codec leaves decode() without a shortcut. UTF-16 text is taken by the UTF-8 shortcut where it
+// carries no byte order mark: every byte of it is under 0x80, NUL bytes included, and isUtf8() accepts that.
 [[nodiscard]] bool takesTheSlowRoute(const char* codecName)
 {
-	return std::string_view{ codecName } != "UTF-8";
+	return std::string_view{ codecName } == eightBitCodecName;
 }
 
 }
 
 TEST_CASE("decode(): the whole call", "[!benchmark]")
 {
-	// UTF-8 and UTF-16LE stand for the fast route, the 8-bit codec for the slow one. UTF-16 without a BOM is
-	// the worst realistic input: no shortcut takes it, and every 8-bit codec finds letters in it.
+	// UTF-8 and UTF-16LE take the fast route, the 8-bit codec the slow one. UTF-16LE is here for what the
+	// shortcut does with it rather than for its cost: it is answered "UTF-8" at full speed, and wrongly.
 	for (const char* codecName : { "UTF-8", eightBitCodecName, "UTF-16LE" })
 	{
 		for (const qsizetype characters : characterCounts)
@@ -97,7 +91,7 @@ TEST_CASE("decode(): the whole call", "[!benchmark]")
 			if (skipped(characters) || (characters > maxCharactersForDetect && takesTheSlowRoute(codecName)))
 				continue;
 
-			const QByteArray data = BenchmarkCorpus::encoded(codecName, characters);
+			const QByteArray data = BenchmarkCorpus::encoded(corpusLanguage, codecName, characters);
 			BENCHMARK(caseName("decode", codecName, characters, data.size()))
 			{
 				return CTextEncodingDetector::decode(data).text.size();
@@ -114,7 +108,7 @@ TEST_CASE("decode(): the UTF-8 shortcut alone", "[!benchmark]")
 		if (skipped(characters))
 			continue;
 
-		const QByteArray data = BenchmarkCorpus::encoded("UTF-8", characters);
+		const QByteArray data = BenchmarkCorpus::encoded(corpusLanguage, "UTF-8", characters);
 		BENCHMARK(caseName("isUtf8", "UTF-8", characters, data.size()))
 		{
 			return isUtf8(data);
@@ -129,7 +123,7 @@ TEST_CASE("detect(): the whole call", "[!benchmark]")
 		if (characters > maxCharactersForDetect || skipped(characters))
 			continue;
 
-		const QByteArray data = BenchmarkCorpus::encoded(eightBitCodecName, characters);
+		const QByteArray data = BenchmarkCorpus::encoded(corpusLanguage, eightBitCodecName, characters);
 		BENCHMARK(caseName("detect", eightBitCodecName, characters, data.size()))
 		{
 			return CTextEncodingDetector::detect(data).size();
@@ -145,7 +139,7 @@ TEST_CASE("detect(): the work it repeats per codec", "[!benchmark]")
 		if (characters > maxCharactersForDetect || skipped(characters))
 			continue;
 
-		const QByteArray data = BenchmarkCorpus::encoded(eightBitCodecName, characters);
+		const QByteArray data = BenchmarkCorpus::encoded(corpusLanguage, eightBitCodecName, characters);
 		QTextCodec* const codec = QTextCodec::codecForName(eightBitCodecName);
 		REQUIRE(codec);
 

@@ -6,61 +6,90 @@ DISABLE_COMPILER_WARNINGS
 #include <QTextCodec>
 RESTORE_COMPILER_WARNINGS
 
+#include <array>
 #include <memory>
 
-QString BenchmarkCorpus::filePath()
+namespace {
+
+struct CorpusFile
 {
-	const QByteArray fromEnvironment = qgetenv("TEXT_ENCODING_DETECTOR_CORPUS");
-	return fromEnvironment.isEmpty() ? QStringLiteral(DEFAULT_CORPUS_FILE) : QString::fromLocal8Bit(fromEnvironment);
+	const char* name;
+	const char* fileName;
+	std::vector<const char*> codecNames;
+};
+
+// The codecs each text is lossless in, which prepare_corpus.ps1 enforces when it writes the file
+const std::array corpusFiles {
+	CorpusFile{ "english", "english.txt", {} },
+	CorpusFile{ "french",  "french.txt",  { "ISO-8859-1" } },
+	CorpusFile{ "german",  "german.txt",  { "ISO-8859-1" } },
+	CorpusFile{ "spanish", "spanish.txt", { "ISO-8859-1" } },
+	CorpusFile{ "polish",  "polish.txt",  { "ISO-8859-2" } },
+	CorpusFile{ "russian", "russian.txt", { "Windows-1251", "KOI8-R", "CP866" } },
+};
+
+[[nodiscard]] const CorpusFile& fileFor(BenchmarkCorpus::Language language)
+{
+	return corpusFiles[static_cast<size_t>(language)];
 }
 
-QByteArray BenchmarkCorpus::codecName()
-{
-	const QByteArray fromEnvironment = qgetenv("TEXT_ENCODING_DETECTOR_CORPUS_CODEC");
-	return fromEnvironment.isEmpty() ? QByteArrayLiteral("KOI8-R") : fromEnvironment;
 }
 
-std::string BenchmarkCorpus::missingCorpusMessage()
+const char* BenchmarkCorpus::name(Language language)
 {
-	return "No corpus at " + filePath().toStdString()
-		+ " - point TEXT_ENCODING_DETECTOR_CORPUS at a text file and TEXT_ENCODING_DETECTOR_CORPUS_CODEC at its encoding";
+	return fileFor(language).name;
 }
 
-const QString& BenchmarkCorpus::text()
+std::vector<const char*> BenchmarkCorpus::codecNames(Language language)
 {
-	static const QString corpus = []() -> QString {
-		QFile file{ filePath() };
-		if (!file.open(QIODevice::ReadOnly))
-			return {};
-
-		QTextCodec* const codec = QTextCodec::codecForName(codecName());
-		if (!codec)
-			return {};
-
-		const std::unique_ptr<QTextDecoder> decoder{ codec->makeDecoder(QTextCodec::IgnoreHeader) };
-		return decoder->toUnicode(file.readAll());
-	}();
-
-	return corpus;
+	return fileFor(language).codecNames;
 }
 
-QString BenchmarkCorpus::slice(qsizetype characters)
+const QString& BenchmarkCorpus::text(Language language)
 {
-	QString sliced = text().left(characters);
+	static std::array<QString, std::size(corpusFiles)> decoded;
+	static std::array<bool, std::size(corpusFiles)> loaded{};
+
+	const size_t index = static_cast<size_t>(language);
+	if (!loaded[index])
+	{
+		loaded[index] = true;
+
+		QFile file{ QStringLiteral(CORPUS_DIR "/") + QLatin1String(fileFor(language).fileName) };
+		if (file.open(QIODevice::ReadOnly))
+			decoded[index] = QString::fromUtf8(file.readAll()); // The corpus is UTF-8 without a byte order mark
+	}
+
+	return decoded[index];
+}
+
+QString BenchmarkCorpus::slice(Language language, qsizetype characters)
+{
+	QString sliced = text(language).left(characters);
 	if (!sliced.isEmpty() && sliced.back().isHighSurrogate()) // A lone surrogate encodes as a replacement character
 		sliced.chop(1);
 
 	return sliced;
 }
 
-QByteArray BenchmarkCorpus::encoded(const char* targetCodecName, qsizetype characters)
+QByteArray BenchmarkCorpus::encoded(Language language, const char* codecName, qsizetype characters)
 {
-	QTextCodec* const codec = QTextCodec::codecForName(targetCodecName);
-	if (text().isEmpty() || !codec)
+	QTextCodec* const codec = QTextCodec::codecForName(codecName);
+	if (!codec)
 		return {};
 
 	const std::unique_ptr<QTextEncoder> encoder{ codec->makeEncoder(QTextCodec::IgnoreHeader) };
-	return encoder->fromUnicode(slice(characters));
+	return encoder->fromUnicode(slice(language, characters));
+}
+
+QString BenchmarkCorpus::representable(Language language, const char* codecName, qsizetype characters)
+{
+	QTextCodec* const codec = QTextCodec::codecForName(codecName);
+	if (!codec)
+		return {};
+
+	const std::unique_ptr<QTextDecoder> decoder{ codec->makeDecoder(QTextCodec::IgnoreHeader) };
+	return decoder->toUnicode(encoded(language, codecName, characters));
 }
 
 QByteArray BenchmarkCorpus::executableBytes(qsizetype bytes)

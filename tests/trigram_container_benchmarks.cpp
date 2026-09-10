@@ -68,7 +68,10 @@ template <typename Key> using BoostMap = boost::unordered_flat_map<Key, Stats, H
 template <typename Key> using AnkerlMap = ankerl::unordered_dense::map<Key, Stats, HashFor<Key>>;
 using SortedVectorMap = flat_map<uint64_t, Stats>;
 
-constexpr qsizetype characterCounts[] = { 64 * 1024, 256 * 1024, 1024 * 1024 };
+// Russian: the trigram stream a real detection pass walks, and the language the baked model below is for
+constexpr auto corpusLanguage = BenchmarkCorpus::Language::Russian;
+
+constexpr qsizetype characterCounts[] = { 64 * 1024, 256 * 1024, 768 * 1024 };
 
 // A sorted vector shifts its tail on every key it has not seen before, so its build is quadratic in the
 // distinct key count while the hash maps stay linear. The ceiling keeps one comparable point without
@@ -82,7 +85,7 @@ template <typename Map> constexpr bool isSortedVector = std::is_same_v<Map, Sort
 {
 	std::vector<Trigram> stream;
 
-	const QString text = BenchmarkCorpus::text().left(characters);
+	const QString text = BenchmarkCorpus::text(corpusLanguage).left(characters);
 	Trigram trigram{};
 	for (const QChar c : text)
 	{
@@ -180,11 +183,14 @@ void benchmarkBuild(const char* container, const char* key)
 
 	for (const qsizetype characters : characterCounts)
 	{
-		if (BenchmarkCorpus::text().size() < characters)
+		if (BenchmarkCorpus::text(corpusLanguage).size() < characters)
 			continue;
 
-		if (isSortedVector<Map> && characters > maxCharactersForSortedVectorBuild)
-			continue;
+		if constexpr (isSortedVector<Map>)
+		{
+			if (characters > maxCharactersForSortedVectorBuild)
+				continue;
+		}
 
 		const std::vector<Key> keys = streamOf<Key>(characters);
 		BENCHMARK_ADVANCED(caseName(container, key, characters))(Catch::Benchmark::Chronometer meter)
@@ -206,7 +212,7 @@ void benchmarkLookup(const char* container, const char* key)
 
 	for (const qsizetype characters : characterCounts)
 	{
-		if (BenchmarkCorpus::text().size() < characters)
+		if (BenchmarkCorpus::text(corpusLanguage).size() < characters)
 			continue;
 
 		Map model;
@@ -249,7 +255,7 @@ TEST_CASE("Trigram table: build by sorting", "[!benchmark]")
 	// The result is a sorted key array, which is the form flat_map holds and the form a lookup pass wants.
 	for (const qsizetype characters : characterCounts)
 	{
-		if (BenchmarkCorpus::text().size() < characters)
+		if (BenchmarkCorpus::text(corpusLanguage).size() < characters)
 			continue;
 
 		const std::vector<uint64_t> keys = packedStream(characters);
