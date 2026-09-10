@@ -137,8 +137,24 @@ Where the slow route's time goes, per codec, at 256 KB — and `detect()` tries 
 | all five frequency tables, built once per process | 0.60 ms | first call only |
 
 At 4 KB of input the table build is two thirds of the first call. Inside `parse()`, the hash map is about a
-quarter and the character scan — `isLetter()` plus `toLower()`, two Unicode table lookups per character — is
-the rest. The scan is the single largest line item in the detector.
+quarter and the character scan is the rest. The scan is the single largest line item in the detector.
+The scan reads a flat table of the lowercase letter for every code point below U+0500, null for everything that is
+not a letter, which answers `isLetter()` and `toLower()` in one lookup; `QChar` answers above it. The table is
+built from `QChar` on first use, so no Unicode data is written out here. Its width covers Latin with its
+supplements and extensions, Greek and Cyrillic — every script the frequency tables have a language for. A table of
+only the 128 ASCII code points instead costs Cyrillic prose 6%: its branch flips at every word boundary.
+
+Per 128 K characters, the whole `decode()` call on the slow route:
+
+| input | `QChar` for every character | table first |
+| --- | --- | --- |
+| 1% Cyrillic clustered in a JSON host | 5.7 ms | 4.6 ms |
+| 5% Cyrillic interleaved into C source | 12.9 ms | 12.3 ms |
+| French prose, ISO-8859-1 | 15.9 ms | 15.0 ms |
+| Russian prose, Windows-1251 | 19.6 ms | 18.4 ms |
+
+A file mixed into an ASCII host is the most ASCII input that reaches detection at all — one with no non-ASCII byte
+is valid UTF-8, and `isUtf8()` answers it — and it gains a fifth of the whole call.
 
 ### The trigram container
 

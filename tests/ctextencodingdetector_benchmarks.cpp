@@ -8,6 +8,7 @@ RESTORE_COMPILER_WARNINGS
 #include "tests/catch_benchmark_reporter.hpp"
 
 #include "benchmark_corpus.h"
+#include "mixed_content_scenarios.h"
 
 #include "ctextencodingdetector.h"
 #include "ctextparser.h"
@@ -23,8 +24,10 @@ DISABLE_COMPILER_WARNINGS
 #include <QTextCodec>
 RESTORE_COMPILER_WARNINGS
 
+#include <algorithm>
 #include <memory>
 #include <string>
+#include <vector>
 
 // What decode() costs, and where the cost goes. Every case is tagged [!benchmark], which Catch2 treats as
 // hidden: the binary with no arguments runs the tests only.
@@ -162,6 +165,66 @@ TEST_CASE("detect(): the work it repeats per codec", "[!benchmark]")
 			CTextParser parser;
 			parser.parse(decodedText);
 			return parser.parsingResult().totalTrigramsCount;
+		};
+	}
+}
+
+// parse() is the largest phase of a detection pass, and its per-character cost depends on the script: only a
+// non-ASCII character reaches QChar's Unicode tables. Detection meets the whole range, from Cyrillic prose that is
+// barely ASCII to the ASCII host of a mixed file.
+TEST_CASE("parse(): by script", "[!benchmark]")
+{
+	// The shortest of the three test texts bounds the length they can be compared at
+	constexpr qsizetype characters = 128 * 1024;
+
+	const struct { const char* script; QString text; } cases[] = {
+		{ "Cyrillic prose", BenchmarkCorpus::slice(BenchmarkCorpus::text(BenchmarkCorpus::Language::Russian), characters) },
+		{ "Latin prose", BenchmarkCorpus::slice(BenchmarkCorpus::text(BenchmarkCorpus::Language::French), characters) },
+		{ "ASCII host", BenchmarkCorpus::slice(BenchmarkCorpus::text(BenchmarkCorpus::Host::Json), characters) }
+	};
+
+	for (const auto& testCase : cases)
+	{
+		BENCHMARK(std::string{ "parse, " } + testCase.script + ", " + std::to_string(testCase.text.size() / 1024) + "K chars")
+		{
+			CTextParser parser;
+			parser.parse(testCase.text);
+			return parser.parsingResult().totalTrigramsCount;
+		};
+	}
+}
+
+// The same range end to end, on the slow route every time. A file mixed into an ASCII host is the detector's
+// most ASCII input that still reaches detection at all: one without a non-ASCII byte is valid UTF-8, and
+// isUtf8() answers it.
+TEST_CASE("decode(): by script", "[!benchmark]")
+{
+	constexpr qsizetype characters = 128 * 1024;
+
+	const std::vector<MixedContent::Scenario> scenarios = MixedContent::scenarios();
+	const auto scenarioText = [&scenarios](const char* scenarioName) {
+		const auto scenario = std::ranges::find(scenarios, scenarioName, &MixedContent::Scenario::name);
+		REQUIRE(scenario != scenarios.end());
+		return scenario->text;
+	};
+
+	const struct { const char* input; QString text; const char* codecName; } cases[] = {
+		{ "1% Cyrillic in a JSON host", scenarioText("russian 1% json clustered"), "Windows-1251" },
+		{ "5% Cyrillic in C source", scenarioText("russian 5% code interleaved"), "Windows-1251" },
+		{ "Latin prose", BenchmarkCorpus::text(BenchmarkCorpus::Language::French), "ISO-8859-1" },
+		{ "Cyrillic prose", BenchmarkCorpus::text(BenchmarkCorpus::Language::Russian), "Windows-1251" }
+	};
+
+	for (const auto& testCase : cases)
+	{
+		const QByteArray data = BenchmarkCorpus::encoded(BenchmarkCorpus::slice(testCase.text, characters), testCase.codecName);
+
+		// A slice that kept no non-ASCII byte would take the UTF-8 route and measure nothing
+		REQUIRE(std::ranges::any_of(data, [](char byte) { return static_cast<unsigned char>(byte) >= 0x80; }));
+
+		BENCHMARK(std::string{ "decode, " } + testCase.input + ", " + std::to_string(data.size() / 1024) + " KB")
+		{
+			return CTextEncodingDetector::decode(data).text.size();
 		};
 	}
 }
