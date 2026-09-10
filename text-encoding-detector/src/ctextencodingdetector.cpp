@@ -2,27 +2,18 @@
 #include "trigramfrequencytables/ctrigramfrequencytable_english.h"
 #include "trigramfrequencytables/ctrigramfrequencytable_russian.h"
 
-#include "qtcore_helpers/qstring_helpers.hpp"
-
 #include "assert/advanced_assert.h"
-#include "lang/type_traits_fast.hpp"
 
 DISABLE_COMPILER_WARNINGS
-#include <QDebug>
-#include <QFile>
-#include <QIODevice>
 #include <QTextCodec>
 RESTORE_COMPILER_WARNINGS
 
 #include <array>
 #include <algorithm>
+#include <cmath>
 #include <string.h> // memcmp
 #include <memory>
 #include <ranges>
-
-#include <math.h>
-
-#include <cmath>
 
 // cosineDistance(): 0.0 is best, 1.0 means no useful trigram overlap.
 static constexpr double plausibleMatchThreshold = 0.95;
@@ -30,6 +21,11 @@ static constexpr double plausibleMatchThreshold = 0.95;
 [[nodiscard]] inline bool startsWithBytes(const QByteArray& data, const char* bytes, int bytesSize) noexcept
 {
 	return data.size() >= bytesSize && ::memcmp(data.constData(), bytes, bytesSize) == 0;
+}
+
+bool isBinary(const QByteArray& data)
+{
+	return data.contains('\0');
 }
 
 bool isUtf8(const QByteArray& data)
@@ -121,8 +117,25 @@ inline bool contains(const Container& container, const Value& value)
 	return std::ranges::find(container, value) != container.end();
 }
 
+// Read-only once built, so one instance serves every call from every thread
+[[nodiscard]] static const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& defaultLanguageTables()
+{
+	static const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>> tables = [] {
+		std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>> built;
+		built.push_back(std::make_unique<CTrigramFrequencyTable_English>());
+		built.push_back(std::make_unique<CTrigramFrequencyTable_Russian>());
+		return built;
+	}();
+
+	return tables;
+}
+
 CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QByteArray & textData, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
+	// BOM-less UTF-16/32 is declined here too: it carries NUL bytes
+	if (isBinary(textData))
+		return {};
+
 	if (auto decodedText = decodeUtfBom(textData); !decodedText.encoding.isEmpty())
 		return decodedText;
 
@@ -180,13 +193,6 @@ CTextEncodingDetector::DecodedText CTextEncodingDetector::decodeUtfBom(const QBy
 
 std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetector::detect(const QByteArray & textData, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
-	std::decay_t<decltype(tablesForLanguages)> defaultTables;
-	if (tablesForLanguages.empty())
-	{
-		defaultTables.push_back(std::make_unique<CTrigramFrequencyTable_English>());
-		defaultTables.push_back(std::make_unique<CTrigramFrequencyTable_Russian>());
-	}
-
 	std::array encodingsShortlist {
 		"Windows-1251",
 		"KOI8-R",
@@ -220,7 +226,7 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetecto
 			codecs.push_back(utfCodec);
 	}
 
-	const auto& languageStatisticsTables = tablesForLanguages.empty() ? defaultTables : tablesForLanguages;
+	const auto& languageStatisticsTables = tablesForLanguages.empty() ? defaultLanguageTables() : tablesForLanguages;
 
 	std::vector<uint64_t> hashes;
 	hashes.reserve(codecs.size());
@@ -230,7 +236,7 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetecto
 
 	for (const auto& codec : codecs)
 	{
-		auto* decoder = codec->makeDecoder();
+		const std::unique_ptr<QTextDecoder> decoder{ codec->makeDecoder() };
 		const QString decodedText = decoder->toUnicode(textData);
 
 		// Skip duplicate codecs that produce the same decoded text
@@ -241,7 +247,7 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetecto
 		hashes.push_back(hash);
 
 		CTextParser parser;
-		if (!parser.parse(decodedText, false, false))
+		if (!parser.parse(decodedText))
 			continue;
 
 		for (const auto& table : languageStatisticsTables)

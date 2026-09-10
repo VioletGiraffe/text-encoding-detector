@@ -28,10 +28,11 @@ RESTORE_COMPILER_WARNINGS
 // hidden: the binary with no arguments runs the tests only.
 //   text-encoding-detector-tests "[!benchmark]" -r fastest --benchmark-no-analysis
 //
-// decode() takes one of two routes, and the encoding of the input alone decides which:
+// decode() takes one of three routes, and the bytes of the input alone decide which:
+//   a NUL byte anywhere - declined as binary before any probe runs
 //   valid UTF-8, pure ASCII included - isUtf8() answers and detect() never runs
 //   anything else - every codec in the shortlist decodes the whole input, and each decoding is parsed and scored
-// The second route is the one a threshold has to be set against, and binary files always take it.
+// The third route is the one a threshold has to be set against, and a binary file without a NUL byte takes it in full.
 //
 // detect() is not instrumented. Its total is measured, and the per-codec work it repeats is measured beside it
 // through the same public calls, so the phases can be weighed against the total without touching the library.
@@ -71,8 +72,8 @@ constexpr qsizetype maxCharactersForDetect = 256 * 1024;
 	return BenchmarkCorpus::text(corpusLanguage).size() < characters;
 }
 
-// Only an 8-bit codec leaves decode() without a shortcut. UTF-16 text is taken by the UTF-8 shortcut where it
-// carries no byte order mark: every byte of it is under 0x80, NUL bytes included, and isUtf8() accepts that.
+// Only an 8-bit codec leaves decode() without a shortcut: UTF-16 text without a byte order mark is declined
+// as binary on its NUL bytes before any probe runs.
 [[nodiscard]] bool takesTheSlowRoute(const char* codecName)
 {
 	return std::string_view{ codecName } == eightBitCodecName;
@@ -82,8 +83,8 @@ constexpr qsizetype maxCharactersForDetect = 256 * 1024;
 
 TEST_CASE("decode(): the whole call", "[!benchmark]")
 {
-	// UTF-8 and UTF-16LE take the fast route, the 8-bit codec the slow one. UTF-16LE is here for what the
-	// shortcut does with it rather than for its cost: it is answered "UTF-8" at full speed, and wrongly.
+	// UTF-8 takes the fast route, the 8-bit codec the slow one, and UTF-16LE is declined as binary: its cost is
+	// the byte scan up to the first NUL, which for Cyrillic text is the first space.
 	for (const char* codecName : { "UTF-8", eightBitCodecName, "UTF-16LE" })
 	{
 		for (const qsizetype characters : characterCounts)
@@ -168,9 +169,9 @@ TEST_CASE("detect(): the work it repeats per codec", "[!benchmark]")
 	}
 }
 
-TEST_CASE("detect(): the frequency tables it builds per call", "[!benchmark]")
+TEST_CASE("detect(): the frequency tables it builds once", "[!benchmark]")
 {
-	// Both tables are locals of detect(), rebuilt and thrown away on every call: a fixed cost no input can shrink
+	// Both tables are built on the first detect() call and kept: this is what that call pays over the rest
 	BENCHMARK("both frequency tables, constructed")
 	{
 		const CTrigramFrequencyTable_English english;
@@ -181,8 +182,9 @@ TEST_CASE("detect(): the frequency tables it builds per call", "[!benchmark]")
 
 TEST_CASE("decode(): binary input", "[!benchmark]")
 {
-	// A binary file is never valid UTF-8, so it takes the slow route in full - the case a size threshold
-	// exists to prevent, and the one no guard currently catches.
+	// An executable image has NUL bytes in its first page, so this is the binary guard's cost and nothing else.
+	// A binary file without a NUL byte is never valid UTF-8 and takes the slow route in full, at the Windows-1251
+	// rate above or worse: garbage yields more distinct trigrams than language does.
 	for (const qsizetype bytes : { 64 * 1024, 256 * 1024, 1024 * 1024 })
 	{
 		const QByteArray data = BenchmarkCorpus::executableBytes(bytes);

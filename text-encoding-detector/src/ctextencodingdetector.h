@@ -6,9 +6,10 @@
 #include <vector>
 
 class CTrigramFrequencyTable_Base;
-class QIODevice;
 class QByteArray;
 
+// A NUL byte anywhere: no 8-bit or UTF-8 text carries one
+[[nodiscard]] bool isBinary(const QByteArray& data);
 [[nodiscard]] bool isUtf8(const QByteArray& data);
 
 class CTextEncodingDetector

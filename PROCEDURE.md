@@ -77,18 +77,20 @@ points, and a single box-drawing glyph would otherwise register as a different v
 
 ## Findings: performance
 
-**`decode()` takes one of two routes, and only the encoding of the input decides which.** Valid UTF-8,
-pure ASCII included, is answered by `isUtf8()` and never reaches `detect()`. Everything else — every 8-bit
-encoding, and every binary file — runs the full detection.
+**`decode()` takes one of three routes, and only the bytes of the input decide which.** A NUL byte anywhere
+declines the input as binary before any probe runs. Valid UTF-8, pure ASCII included, is answered by
+`isUtf8()` and never reaches `detect()`. Everything else — every 8-bit encoding, and any binary file without a
+NUL byte — runs the full detection.
 
 | input | 64 KB | 256 KB | 1.3 MB |
 | --- | --- | --- | --- |
 | valid UTF-8 | 580 µs | 2.40 ms | 7.65 ms |
-| Windows-1251 | 12.0 ms | 36.4 ms | — |
-| binary (the test executable) | 17.0 ms | 58.3 ms | — |
+| Windows-1251 | 8.56 ms | 30.2 ms | — |
+| binary on the slow route (the test executable, measured before the guard) | 17.0 ms | 58.3 ms | — |
 
-**Roughly 5.6 ms per MB on the fast route against ~127 ms per MB on the slow one.** Binary is worse than text,
-because garbage produces more distinct trigrams than language does.
+**Roughly 5.6 ms per MB on the fast route against ~120 ms per MB on the slow one.** Binary is worse than text,
+because garbage produces more distinct trigrams than language does; the guard stops anything with a NUL byte
+at that byte, and the row above is what a binary file without one still costs.
 
 Where the slow route's time goes, per codec, at 256 KB — and `detect()` tries about a dozen:
 
@@ -97,9 +99,9 @@ Where the slow route's time goes, per codec, at 256 KB — and `detect()` tries 
 | `parse()` | 3.78 ms | 88% |
 | codec decode | 460 µs | 11% |
 | dedup hash | 44 µs | 1% |
-| both frequency tables, **rebuilt on every call** | 2.33 ms | fixed |
+| both frequency tables, built once per process | 2.33 ms | first call only |
 
-At 4 KB of input the table rebuild is two thirds of the whole call. Inside `parse()`, the hash map is about a
+At 4 KB of input the table build is two thirds of the first call. Inside `parse()`, the hash map is about a
 quarter and the character scan — `isLetter()` plus `toLower()`, two Unicode table lookups per character — is
 the rest. The scan is the single largest line item in the detector.
 
@@ -134,6 +136,8 @@ predicate, and the sliding window itself signals when it is full.
 alphabet below U+0800 is entirely bytes under 0x80 — NUL bytes included. Measured on the corpus: **244,338
 characters of UTF-16LE Russian were accepted as UTF-8** before one U+00A0 broke the spell. The same rule makes
 it the guard that decides "this is text" for binary files, and it says yes to a stream that is 19% NUL.
+`decode()` now declines any input with a NUL byte before probing, which covers both — at the price of BOM-less
+UTF-16/32 being declined instead of detected. `isUtf8()` itself is unchanged: a NUL is valid UTF-8.
 
 **3. Whole-file detection is confident mojibake on mixed content — including Russian.** With real English
 prose as the ASCII half, `detect()` gets *every* mixed scenario wrong at scores of 0.09–0.12, which is maximum
@@ -206,8 +210,9 @@ and a synthetic input that is wrong in a way you have not thought of returns a c
 
 ## Known open items
 
-- `text-analyzer` passes a file path where `parse()` now expects text, so the frequency tables cannot be
-  regenerated. Its two vestigial `parse()` parameters go with that fix.
-- `detect()` rebuilds both frequency tables on every call, and leaks a `QTextDecoder` per codec per call.
 - `decode()` decodes the winning encoding a second time, having discarded the copy `detect()` made.
-- `ctextparser.cpp` still includes `<QFile>` and `<QTextCodec>`, orphaned when the file/device overloads went.
+- The NUL guard is broad both ways: a NUL-terminated text file is declined, and a binary file without a NUL
+  byte still runs the full detection.
+- The text viewer's explicit "as UTF-8" action does not use the binary guard.
+- The committed tables were baked with the seed-loop `parse()` of finding 1, from a corpus that is not recorded.
+  Regenerating them from `tests/corpus/` is what makes French and German tables possible.

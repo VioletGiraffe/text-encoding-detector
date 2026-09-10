@@ -1,13 +1,10 @@
 #include "ctextparser.h"
 
-DISABLE_COMPILER_WARNINGS
-#include <QFile>
-#include <QTextCodec>
-RESTORE_COMPILER_WARNINGS
+#include <math.h>
 
 // Counts a trigram at every letter, non-letters dropping out without breaking the window: a trigram spans a word boundary.
 // The baked frequency tables were built by this same function, so a text scored against them must be parsed the same way.
-bool CTextParser::parse(const QString& text, const bool /*fastAnalysis*/, const bool /*ignoreNonLetters*/)
+bool CTextParser::parse(const QString& text)
 {
 	const QChar* const textChars = text.constData();
 	const qsizetype textSize = text.size();

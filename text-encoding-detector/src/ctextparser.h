@@ -12,9 +12,6 @@ RESTORE_COMPILER_WARNINGS
 #include <array>
 #include <type_traits>
 
-class QByteArray;
-class QIODevice;
-
 class CTextParser
 {
 public:
@@ -48,7 +45,7 @@ public:
 	};
 
 	// Subsequent calls to parse() will not reset the frequency table
-	bool parse(const QString& text, bool fastAnalysis = false, bool ignoreNonLetters = false);
+	bool parse(const QString& text);
 
 	// This method clears the table and sets counters to 0
 	void clear();

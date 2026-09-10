@@ -82,9 +82,18 @@ static void scanFolder(const QString& folderPath, CTextParser& parser)
 			scanFolder(entry.absoluteFilePath(), parser);
 		else if (entry.isFile() && entry.suffix().toLower() == "txt")
 		{
-			if (!parser.parse(entry.absoluteFilePath(), "UTF-8"))
+			QFile file{ entry.absoluteFilePath() };
+			if (!file.open(QFile::ReadOnly))
 			{
-				std::cout << "Failed to parse" << entry.fileName().toStdString() << std::endl;
+				std::cout << "Failed to open " << entry.fileName().toStdString() << std::endl;
+				continue;
+			}
+
+			// Invalid UTF-8 decodes to replacement characters: parse() skips them as non-letters and joins the letters around them into trigrams the text never had
+			const QString text = QString::fromUtf8(file.readAll());
+			if (text.contains(QChar{ QChar::ReplacementCharacter }) || !parser.parse(text))
+			{
+				std::cout << "Failed to parse " << entry.fileName().toStdString() << std::endl;
 				std::cout << "Make sure it's a UTF-8 text file." << std::endl;
 			}
 		}
