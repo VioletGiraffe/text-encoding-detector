@@ -32,13 +32,24 @@ public:
 	};
 
 	// In order: a BOM; BOM-less UTF-16/32 by its NUL layout, with any other NUL-carrying input declined as binary;
-	// valid UTF-8; then the 8-bit codecs scored against the language tables. Empty where nothing is plausible.
+	// valid UTF-8; then the 8-bit codecs scored against the language tables, on anchoredSample() of the input.
+	// Empty where nothing is plausible.
 	[[nodiscard]] static DecodedText
 	decode(const QByteArray& textData, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages = std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>());
 
 	[[nodiscard]] static DecodedText decodeUtfBom(const QByteArray& textData);
 
-	// The results are sorted by score from best to worst
+	// Scores the whole of 'textData' under every shortlisted codec. The results are sorted by score from best to worst.
 	[[nodiscard]] static std::vector<EncodingDetectionResult>
 	detect(const QByteArray& textData, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages = std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>());
+
+	static constexpr qsizetype detectionSampleBudget = 256 * 1024;
+	// Small chunks rather than few large ones: the ASCII around a non-ASCII byte decodes the same under every
+	// codec and only takes budget from the bytes that decide
+	static constexpr qsizetype detectionSampleChunk = 128;
+
+	// The bytes decode() has detect() score for an input over the budget: chunks centred on evenly spaced
+	// non-ASCII bytes, the only ones the 8-bit codecs disagree on. Constant cost, every part of the file represented.
+	// The input itself when it fits the budget; empty for all-ASCII input, which never reaches detection.
+	[[nodiscard]] static QByteArray anchoredSample(const QByteArray& data, qsizetype budgetBytes = detectionSampleBudget, qsizetype chunkBytes = detectionSampleChunk);
 };

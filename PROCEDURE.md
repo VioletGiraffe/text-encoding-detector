@@ -59,7 +59,7 @@ run, or open `tests/text-encoding-detector-tests.pro` directly.
 | --- | --- |
 | `benchmark_corpus.{h,cpp}` | the corpus: decoding, slicing, encoding into a named codec |
 | `mixed_content_scenarios.{h,cpp}` | each language whole and mixed into three hosts at three shares in three shapes |
-| `ctextencodingdetector_tests.cpp` | correctness: the corpus contract, and `decode()` over every language, the second author and every mixed-content scenario, with the winning score capped at 0.90 |
+| `ctextencodingdetector_tests.cpp` | correctness: the corpus contract; `decode()` over every language, the second author, every mixed-content scenario whole and grown past the sample budget, with the winning score capped at 0.90; the wide encodings with and without a mark; binary declined |
 | `ctextencodingdetector_benchmarks.cpp` | what `decode()` costs and where the cost goes |
 | `trigram_container_benchmarks.cpp` | the trigram table's container and key shape |
 | `detection_window_study.cpp` | how little of a file detection can read and still be right |
@@ -76,8 +76,8 @@ CI (`.github/workflows/CI.yml`) builds the tests and `text-analyzer` on Windows,
 tests, and runs the benchmarks with a handful of samples as a smoke test only: a shared runner's timings are
 not comparable to the numbers below.
 
-Benchmarks and the study are hidden behind tags; a plain run is the mixed-content matrix, whole files, about
-five seconds on the machine above. The benchmark reporter is
+Benchmarks and the study are hidden behind tags; a plain run is mostly the mixed-content matrix, about six
+seconds on the machine above. The benchmark reporter is
 `cpp-template-utils/tests/catch_benchmark_reporter.hpp`, which reports the mean of the fastest third of the
 samples — interference only ever adds time, so the fastest samples are the honest ones.
 
@@ -107,20 +107,22 @@ points, and a single box-drawing glyph would otherwise register as a different v
 names the encoding outright. A NUL byte anywhere is either BOM-less UTF-16/32, told by the phase its NULs keep
 (finding 17), or binary, declined before any probe runs. Valid UTF-8, pure ASCII included, is answered by
 `isUtf8()` and never reaches `detect()`. Everything else — every 8-bit encoding, and any binary file without a
-NUL byte — runs the full detection.
+NUL byte — runs the detection, on the whole input up to 256 KB and on a sample of that size past it (finding 18).
 
 | input | 64 KB | 256 KB | 1.3 MB |
 | --- | --- | --- | --- |
 | valid UTF-8 | 580 µs | 2.40 ms | 7.65 ms |
-| Windows-1251, five language tables | 9.01 ms | 31.9 ms | — |
+| Windows-1251, five language tables | 9.01 ms | 31.9 ms | 41.8 ms at 768 KB |
 | binary on the slow route (the test executable, measured before the guard) | 17.0 ms | 58.3 ms | — |
 
 BOM-less UTF-16LE, the wide route: 859 µs at 128 KB, 3.44 ms at 512 KB, 10.4 ms at 1.5 MB — about 6.8 ms per
 MB, the fast route's class.
 
-**Roughly 5.6 ms per MB on the fast route against ~130 ms per MB on the slow one.** Binary is worse than text,
-because garbage produces more distinct trigrams than language does; the guard stops anything with a NUL byte
-at that byte, and the row above is what a binary file without one still costs.
+**Roughly 5.6 ms per MB on the fast route against ~130 ms per MB on the slow one, which the sample caps.** Past
+256 KB the slow route costs the 32 ms of a 256 KB detection, two passes over the bytes and one decode of the
+whole input: 41.8 ms at 768 KB. Binary is worse than text, because garbage produces more distinct trigrams than
+language does; the guard stops anything with a NUL byte at that byte, and the row above is what a binary file
+without one still costs.
 
 Each language table is one more scoring pass per codec; the model's own norm is precomputed at construction,
 and only the sample's non-ASCII trigrams are looked up, so a pass is cheap next to `parse()`.
@@ -317,11 +319,21 @@ without a mark; a Windows-1251 text with one trailing NUL and the test executabl
 Found in passing: since the guard landed, a UTF-16 or UTF-32 file *with* a byte order mark had been declined
 too, because the guard ran ahead of the mark check. The mark is now read first.
 
+**18. The anchored sampler is in `decode()`, at a 256 KB budget.** `detect()` still scores whatever it is
+given; `decode()` hands it `anchoredSample()` of the input — the input itself up to the budget, past it
+128-byte chunks centred on evenly spaced non-ASCII bytes, found in two passes over the bytes so that a large
+Cyrillic file never needs a list of its anchors. The winner then decodes the whole input once. The budget is
+larger than the study needed: the 16 KB and 64 KB samples are both correct on all 140 scenarios, and 64 KB's
+worst score sits 0.08 above the whole file's (Spanish at 1%, clustered: 0.65 against 0.57), so the extra
+budget buys margin at a cost of some 35 ms per file. The study now calls the library's sampler at its own
+budgets; its columns are unchanged except Polish prose, which at 24 KB fits the 64 KB budget and is scored
+whole. The tests grow the sparsest scenarios (1% prose) and the densest (pure prose) to twice the budget by
+repetition and require the same recovery under the same cap.
+
 ### The design these point to
 
-1. Score only trigrams carrying a non-ASCII character — done, in the library.
-2. Sample by anchoring fixed-size chunks on the non-ASCII bytes, at a bounded budget, so the cost stops being
-   ~130 ms per MB. Not yet in the library; `decode()` still reads the whole file.
+1. Score only trigrams carrying a non-ASCII character — done, in the library (finding 13).
+2. Sample by anchoring fixed-size chunks on the non-ASCII bytes, at a bounded budget — done (finding 18).
 3. Return nothing when the sample holds nothing to score, which the threshold already does.
 
 ## What the corpus changed
@@ -343,7 +355,6 @@ and a synthetic input that is wrong in a way you have not thought of returns a c
 
 ## Known open items
 
-- `decode()` decodes the winning encoding a second time, having discarded the copy `detect()` made.
 - A binary file without a NUL byte runs the full detection. Above a few hundred bytes such files barely exist,
   and the outcome is a decline either way, so this is a cost, not a wrong answer.
 - The text viewer's explicit "as UTF-8" action does not use the binary guard.

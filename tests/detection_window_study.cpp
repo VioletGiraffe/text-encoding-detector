@@ -22,8 +22,8 @@ RESTORE_COMPILER_WARNINGS
 #include <vector>
 
 // How little of a file detection can read and still decode the whole of it correctly. detect() costs ~130 ms
-// per MB of non-UTF-8 input, all of it linear, so a bounded sample makes the cost constant - if the sample
-// still answers for the file it was drawn from.
+// per MB of non-UTF-8 input, all of it linear, so decode() hands it a bounded sample; this measures the schemes
+// and budgets that sample could use, against the whole file.
 //
 // Hidden behind a '.' tag; it produces numbers rather than asserting:
 //   text-encoding-detector-tests "[study]"
@@ -43,9 +43,7 @@ namespace {
 
 constexpr qsizetype windowSizes[] = { 16384, 65536 };
 constexpr int chunkCount = 8;
-// Many small windows rather than few large ones: a window centred on a non-ASCII byte carries its ASCII
-// surroundings in with it, and those surroundings are what drown the signal in a mostly-ASCII file.
-constexpr qsizetype denseChunkBytes = 128;
+constexpr qsizetype denseChunkBytes = CTextEncodingDetector::detectionSampleChunk;
 constexpr int nameWidth = 30;
 
 // k chunks of budget/k bytes, spread from the start of the data to its end
@@ -58,37 +56,6 @@ constexpr int nameWidth = 30;
 	for (int i = 0; i < chunks; ++i)
 	{
 		const qsizetype start = (data.size() - chunkSize) * i / (chunks - 1);
-		sample.append(data.constData() + start, chunkSize);
-	}
-
-	return sample;
-}
-
-// The same budget, placed where the non-ASCII bytes are: a byte under 0x80 decodes the same under every
-// candidate, so a window holding nothing else cannot choose between them.
-// Finding them costs one scan at memory speed, against detection's ~130 ms per MB.
-[[nodiscard]] QByteArray anchoredSample(const QByteArray& data, qsizetype budget, qsizetype chunkSize)
-{
-	std::vector<qsizetype> anchors;
-	for (qsizetype i = 0; i < data.size(); ++i)
-	{
-		if (static_cast<unsigned char>(data[i]) >= 0x80)
-			anchors.push_back(i);
-	}
-
-	if (anchors.empty())
-		return data.left(budget);
-
-	// Never more chunks than anchors: past that the same byte comes back repeatedly, which is a sample of
-	// nothing the file contains
-	const qsizetype chunks = std::min<qsizetype>(budget / chunkSize, (qsizetype)anchors.size());
-
-	QByteArray sample;
-	sample.reserve(budget);
-	for (qsizetype i = 0; i < chunks; ++i)
-	{
-		const qsizetype anchor = anchors[(qsizetype)anchors.size() * i / chunks];
-		const qsizetype start = std::clamp<qsizetype>(anchor - chunkSize / 2, 0, data.size() - chunkSize);
 		sample.append(data.constData() + start, chunkSize);
 	}
 
@@ -246,7 +213,7 @@ TEST_CASE("Detection accuracy against the size and placement of the sample it re
 		{
 			const Outcome prefix = overScenario(i, [budget](const QByteArray& data) { return data.left(budget); });
 			const Outcome spread = overScenario(i, [budget](const QByteArray& data) { return spreadSample(data, budget, chunkCount); });
-			const Outcome anchored = overScenario(i, [budget](const QByteArray& data) { return anchoredSample(data, budget, denseChunkBytes); });
+			const Outcome anchored = overScenario(i, [budget](const QByteArray& data) { return CTextEncodingDetector::anchoredSample(data, budget, denseChunkBytes); });
 
 			std::cout << std::setw(nameWidth) << all[i].name
 				<< "   " << formatted(prefix)
@@ -257,12 +224,12 @@ TEST_CASE("Detection accuracy against the size and placement of the sample it re
 
 	std::cout << "\n=== whole file and the 64 KB anchored sample: the winner against the closest reading that decodes differently ===\n"
 		<< "A run-time guard can see this; it cannot see whether the winner is right.\n"
-		<< std::setw(nameWidth) << "content" << "   whole file (today)      anchored 128B, 64 KB\n";
+		<< std::setw(nameWidth) << "content" << "   whole file              anchored 128B, 64 KB\n";
 
 	for (size_t i = 0; i < all.size(); ++i)
 	{
 		const Outcome whole = overScenario(i, [](const QByteArray& data) { return data; });
-		const Outcome anchored = overScenario(i, [](const QByteArray& data) { return anchoredSample(data, 65536, denseChunkBytes); });
+		const Outcome anchored = overScenario(i, [](const QByteArray& data) { return CTextEncodingDetector::anchoredSample(data, 65536, denseChunkBytes); });
 
 		const auto scoreAndMargin = [](const Outcome& outcome) {
 			std::ostringstream cell;

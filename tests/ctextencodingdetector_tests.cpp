@@ -144,6 +144,24 @@ TEST_CASE("decode() recovers each language from every host, shape and share it i
 	}
 }
 
+// Past the budget the sample chooses the codec and the whole file is what the choice has to be right about.
+// The sparsest scenarios, 1% prose, and the densest, pure prose, each grown to twice the budget by repetition.
+TEST_CASE("decode() recovers files past the detection sample budget")
+{
+	for (const MixedContent::Scenario& scenario : MixedContent::scenarios())
+	{
+		if (!scenario.name.ends_with(" prose") && scenario.name.find(" 1% ") == std::string::npos)
+			continue;
+
+		QString grown;
+		while (grown.size() < 2 * CTextEncodingDetector::detectionSampleBudget) // 8-bit codecs: one byte per character
+			grown += scenario.text;
+
+		for (const char* codecName : scenario.codecNames)
+			checkRecovered(scenario.name + ", grown past the budget", grown, codecName);
+	}
+}
+
 // Every corpus text, the ASCII hosts included, in each wide encoding with and without a byte order mark: the
 // mark or the layout of the NUL bytes names the encoding, the text is read back exactly and reported as certain
 TEST_CASE("decode() reads UTF-16 and UTF-32, with or without a byte order mark")

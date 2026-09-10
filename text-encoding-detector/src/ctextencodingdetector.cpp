@@ -260,7 +260,7 @@ CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QByteArra
 	if (isUtf8(textData))
 		return DecodedText{QString::fromUtf8(textData), "UTF-8", {}, 0.0};
 
-	const auto detectionResult = detect(textData, tablesForLanguages);
+	const auto detectionResult = detect(anchoredSample(textData), tablesForLanguages);
 	if (!detectionResult.empty() && detectionResult.front().score < plausibleMatchThreshold)
 	{
 		const auto& best = detectionResult.front();
@@ -271,6 +271,38 @@ CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QByteArra
 	}
 
 	return DecodedText();
+}
+
+QByteArray CTextEncodingDetector::anchoredSample(const QByteArray& data, qsizetype budgetBytes, qsizetype chunkBytes)
+{
+	if (data.size() <= budgetBytes)
+		return data;
+
+	const auto* const bytes = reinterpret_cast<const unsigned char*>(data.constData());
+	qsizetype anchorCount = 0;
+	for (qsizetype i = 0; i < data.size(); ++i)
+		anchorCount += bytes[i] >= 0x80;
+
+	// Never more chunks than anchors: past that the same bytes come back repeatedly
+	const qsizetype chunks = std::min(budgetBytes / chunkBytes, anchorCount);
+
+	QByteArray sample;
+	sample.reserve(chunks * chunkBytes);
+
+	// The anchors of rank anchorCount * c / chunks, taken in a second pass: a list of every non-ASCII offset would
+	// outweigh a large Cyrillic file
+	qsizetype rank = 0;
+	for (qsizetype i = 0, c = 0; i < data.size() && c < chunks; ++i)
+	{
+		if (bytes[i] < 0x80 || rank++ != anchorCount * c / chunks)
+			continue;
+
+		const qsizetype start = std::clamp<qsizetype>(i - chunkBytes / 2, 0, data.size() - chunkBytes);
+		sample.append(data.constData() + start, chunkBytes);
+		++c;
+	}
+
+	return sample;
 }
 
 CTextEncodingDetector::DecodedText CTextEncodingDetector::decodeUtfBom(const QByteArray& textData)

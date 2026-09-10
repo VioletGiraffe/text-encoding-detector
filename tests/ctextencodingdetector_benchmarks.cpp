@@ -25,7 +25,6 @@ RESTORE_COMPILER_WARNINGS
 
 #include <memory>
 #include <string>
-#include <string_view>
 
 // What decode() costs, and where the cost goes. Every case is tagged [!benchmark], which Catch2 treats as
 // hidden: the binary with no arguments runs the tests only.
@@ -35,8 +34,9 @@ RESTORE_COMPILER_WARNINGS
 //   a byte order mark - named outright
 //   a NUL byte anywhere - BOM-less UTF-16/32 by the phase of its NULs, else declined as binary before any probe runs
 //   valid UTF-8, pure ASCII included - isUtf8() answers and detect() never runs
-//   anything else - every codec in the shortlist decodes the whole input, and each decoding is parsed and scored
-// The last route is the one a threshold has to be set against, and a binary file without a NUL byte takes it in full.
+//   anything else - every codec in the shortlist decodes a bounded sample of the input, and each decoding is parsed and
+//                   scored; the winner then decodes the whole input once
+// The last route is the one detect()'s own numbers describe, and a binary file without a NUL byte takes it too.
 //
 // detect() is not instrumented. Its total is measured, and the per-codec work it repeats is measured beside it
 // through the same public calls, so the phases can be weighed against the total without touching the library.
@@ -76,13 +76,6 @@ constexpr qsizetype maxCharactersForDetect = 256 * 1024;
 	return BenchmarkCorpus::text(corpusLanguage).size() < characters;
 }
 
-// Only an 8-bit codec leaves decode() without a shortcut: UTF-16 text without a byte order mark is read off
-// the phase of its NUL bytes before any probe runs.
-[[nodiscard]] bool takesTheSlowRoute(const char* codecName)
-{
-	return std::string_view{ codecName } == eightBitCodecName;
-}
-
 }
 
 TEST_CASE("decode(): the whole call", "[!benchmark]")
@@ -93,7 +86,7 @@ TEST_CASE("decode(): the whole call", "[!benchmark]")
 	{
 		for (const qsizetype characters : characterCounts)
 		{
-			if (skipped(characters) || (characters > maxCharactersForDetect && takesTheSlowRoute(codecName)))
+			if (skipped(characters))
 				continue;
 
 			const QByteArray data = BenchmarkCorpus::encoded(corpusLanguage, codecName, characters);
@@ -192,8 +185,8 @@ TEST_CASE("detect(): the frequency tables it builds once", "[!benchmark]")
 TEST_CASE("decode(): binary input", "[!benchmark]")
 {
 	// An executable image has NUL bytes in its first page, so this is the binary guard's cost and nothing else.
-	// A binary file without a NUL byte is never valid UTF-8 and takes the slow route in full, at the Windows-1251
-	// rate above or worse: garbage yields more distinct trigrams than language does.
+	// A binary file without a NUL byte is never valid UTF-8 and takes the slow route, at the Windows-1251 rate
+	// above or worse: garbage yields more distinct trigrams than language does.
 	for (const qsizetype bytes : { 64 * 1024, 256 * 1024, 1024 * 1024 })
 	{
 		const QByteArray data = BenchmarkCorpus::executableBytes(bytes);
