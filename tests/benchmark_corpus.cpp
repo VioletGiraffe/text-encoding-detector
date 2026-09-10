@@ -18,14 +18,15 @@ struct CorpusFile
 	std::vector<const char*> codecNames;
 };
 
-// The codecs each text is lossless in, which prepare_corpus.ps1 enforces when it writes the file
+// The codecs each text is lossless in and which write it to distinct bytes, which prepare_corpus.ps1 enforces
+// when it writes the file. Windows-1252 and ISO-8859-15 write these texts to the same bytes as ISO-8859-1.
 const std::array corpusFiles {
 	CorpusFile{ "english", "english.txt", {} },
-	CorpusFile{ "french",  "french.txt",  { "ISO-8859-1" } },
-	CorpusFile{ "german",  "german.txt",  { "ISO-8859-1" } },
-	CorpusFile{ "spanish", "spanish.txt", { "ISO-8859-1" } },
-	CorpusFile{ "polish",  "polish.txt",  { "ISO-8859-2" } },
-	CorpusFile{ "russian", "russian.txt", { "Windows-1251", "KOI8-R", "CP866" } },
+	CorpusFile{ "french",  "french.txt",  { "ISO-8859-1", "macintosh" } },
+	CorpusFile{ "german",  "german.txt",  { "ISO-8859-1", "macintosh" } },
+	CorpusFile{ "spanish", "spanish.txt", { "ISO-8859-1", "macintosh" } },
+	CorpusFile{ "polish",  "polish.txt",  { "ISO-8859-2", "Windows-1250" } },
+	CorpusFile{ "russian", "russian.txt", { "Windows-1251", "KOI8-R", "CP866", "ISO-8859-5" } },
 };
 
 const std::array hostFiles {

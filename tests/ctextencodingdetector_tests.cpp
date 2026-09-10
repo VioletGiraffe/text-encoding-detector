@@ -9,6 +9,10 @@ RESTORE_COMPILER_WARNINGS
 
 #include "ctextencodingdetector.h"
 
+DISABLE_COMPILER_WARNINGS
+#include <QTextCodec>
+RESTORE_COMPILER_WARNINGS
+
 #include <algorithm>
 #include <cstdint>
 #include <string>
@@ -88,6 +92,16 @@ TEST_CASE("Every corpus file is present and holds text")
 	{
 		INFO("corpus/test/" << BenchmarkCorpus::name(host) << ".txt");
 		REQUIRE(BenchmarkCorpus::text(host).size() >= MixedContent::scenarioCharacters);
+	}
+}
+
+// detect() drops a name Qt cannot resolve without a word, so a misspelt entry would silently narrow the shortlist
+TEST_CASE("Every codec in detect()'s shortlist resolves")
+{
+	for (const char* codecName : CTextEncodingDetector::codecShortlist())
+	{
+		INFO(codecName);
+		CHECK(QTextCodec::codecForName(codecName) != nullptr);
 	}
 }
 

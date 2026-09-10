@@ -21,9 +21,9 @@ RESTORE_COMPILER_WARNINGS
 #include <string>
 #include <vector>
 
-// How little of a file detection can read and still decode the whole of it correctly. detect() costs ~130 ms
-// per MB of non-UTF-8 input, all of it linear, so decode() hands it a bounded sample; this measures the schemes
-// and budgets that sample could use, against the whole file.
+// How little of a file detection can read and still decode the whole of it correctly. detect() is linear in its
+// input with a large constant (PROCEDURE.md has the figures), so decode() hands it a bounded sample; this measures
+// the schemes and budgets that sample could use, against the whole file.
 //
 // Hidden behind a '.' tag; it produces numbers rather than asserting:
 //   text-encoding-detector-tests "[study]"

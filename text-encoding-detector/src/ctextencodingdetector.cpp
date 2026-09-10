@@ -343,26 +343,29 @@ CTextEncodingDetector::DecodedText CTextEncodingDetector::decodeUtfBom(const QBy
 	return {};
 }
 
+namespace {
+
+// Windows-1252 ahead of ISO-8859-1 and ISO-8859-15, Windows-1250 ahead of ISO-8859-2: the text they read alike
+// is more often the Windows one. No Mac Cyrillic or Mac Central European: Qt has no codec for either.
+constexpr std::array eightBitCodecs {
+	"Windows-1251", "KOI8-R", "KOI8-U", "CP866", "ISO-8859-5",
+	"Windows-1252", "ISO-8859-1", "ISO-8859-15", "macintosh",
+	"Windows-1250", "ISO-8859-2",
+};
+
+}
+
+std::span<const char* const> CTextEncodingDetector::codecShortlist() noexcept
+{
+	return eightBitCodecs;
+}
+
 std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetector::detect(const QByteArray & textData, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
-	std::array encodingsShortlist {
-		"Windows-1251",
-		"KOI8-R",
-		"KOI8-U",
-		"CP866",
-		"ISO-8859-1",
-		"ISO-8859-2",
-		"UTF-16LE",
-		"UTF-16BE",
-		"UTF-32LE",
-		"UTF-32BE",
-		"UTF-8",
-	};
-
 	std::vector<QTextCodec*> codecs;
-	codecs.reserve(encodingsShortlist.size() + 2);
+	codecs.reserve(eightBitCodecs.size() + 1);
 
-	for (const char* encodingName : encodingsShortlist)
+	for (const char* encodingName : eightBitCodecs)
 	{
 		QTextCodec* codec = QTextCodec::codecForName(encodingName);
 		if (codec && !contains(codecs, codec))
@@ -371,12 +374,6 @@ std::vector<CTextEncodingDetector::EncodingDetectionResult> CTextEncodingDetecto
 
 	if (auto* localeCodec = QTextCodec::codecForLocale(); localeCodec && !contains(codecs, localeCodec))
 		codecs.push_back(localeCodec);
-
-	if (auto* utfCodec = QTextCodec::codecForUtfText(textData, nullptr); utfCodec)
-	{
-		if (!contains(codecs, utfCodec))
-			codecs.push_back(utfCodec);
-	}
 
 	const auto& languageStatisticsTables = tablesForLanguages.empty() ? defaultLanguageTables() : tablesForLanguages;
 

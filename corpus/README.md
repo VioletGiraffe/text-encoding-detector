@@ -20,12 +20,16 @@ case calls for, so each file must survive that encoding unchanged - see the norm
 | language | test chars | train chars | non-ASCII | must be lossless in | source |
 | --- | --- | --- | --- | --- | --- |
 | English | 200,000 | 528,697 | 0.00% | ASCII | *Pride and Prejudice*, Jane Austen, [PG 1342](https://www.gutenberg.org/ebooks/1342) |
-| French | 150,000 | 457,304 | 2.59% | ISO-8859-1 | *Le Fantôme de l'Opéra*, Gaston Leroux, [PG 62215](https://www.gutenberg.org/ebooks/62215) |
-| German | 100,000 | 368,893 | 1.96% | ISO-8859-1 | *Dr. Mabuse, der Spieler*, Norbert Jacques, [PG 50285](https://www.gutenberg.org/ebooks/50285) |
-| Spanish | 200,000 | 600,000 | 2.09% | ISO-8859-1 | *Don Quijote*, Cervantes, [PG 2000](https://www.gutenberg.org/ebooks/2000) |
-| Polish | 24,000 | 216,484 | 6.81% | ISO-8859-2 | *Tajemnica Baskerville'ów*, Conan Doyle, tr. Żmijewska, [PG 34079](https://www.gutenberg.org/ebooks/34079) |
-| Russian | 800,000 | 912,686 | 78.08% | Windows-1251, KOI8-R, CP866 | *Anna Karenina*, Tolstoy, supplied locally |
-| Russian, second author (`russian-kuprin.txt`) | 440,115 | none | 78.86% | Windows-1251, KOI8-R, CP866 | *Поединок*, Kuprin, [Wikisource](https://ru.wikisource.org/wiki/Поединок_(Куприн)) |
+| French | 150,000 | 457,304 | 2.59% | Western | *Le Fantôme de l'Opéra*, Gaston Leroux, [PG 62215](https://www.gutenberg.org/ebooks/62215) |
+| German | 100,000 | 368,893 | 1.96% | Western | *Dr. Mabuse, der Spieler*, Norbert Jacques, [PG 50285](https://www.gutenberg.org/ebooks/50285) |
+| Spanish | 200,000 | 600,000 | 2.09% | Western | *Don Quijote*, Cervantes, [PG 2000](https://www.gutenberg.org/ebooks/2000) |
+| Polish | 24,000 | 216,484 | 6.81% | ISO-8859-2, Windows-1250 | *Tajemnica Baskerville'ów*, Conan Doyle, tr. Żmijewska, [PG 34079](https://www.gutenberg.org/ebooks/34079) |
+| Russian | 800,000 | 912,686 | 78.08% | Cyrillic | *Anna Karenina*, Tolstoy, supplied locally |
+| Russian, second author (`russian-kuprin.txt`) | 440,115 | none | 78.86% | Cyrillic | *Поединок*, Kuprin, [Wikisource](https://ru.wikisource.org/wiki/Поединок_(Куприн)) |
+
+Western is ISO-8859-1, Windows-1252, ISO-8859-15 and macintosh; Cyrillic is Windows-1251, KOI8-R, CP866 and
+ISO-8859-5. Windows-1252 and ISO-8859-15 write these texts to the very bytes ISO-8859-1 does, so the tests run
+the Western texts through ISO-8859-1 and macintosh only.
 
 Two more test-only files are *hosts*: ASCII text the mixed-content scenarios sprinkle the languages into,
 alongside the English prose. No table is built from them, and they must hold no non-ASCII byte at all.
@@ -40,8 +44,8 @@ is the ASCII half of every mixed-content study scenario, the Russian one spans t
 Gutenberg works are capped at 800,000 characters; Russian is not, being the one work not bounded by its
 download and the language with the most encodings to tell apart.
 
-Between them they exercise every 8-bit codec in `CTextEncodingDetector::detect()`'s shortlist. Polish is the
-only source of ISO-8859-2 coverage; English carries no non-ASCII at all, which is its purpose.
+Between them they exercise every 8-bit codec in `CTextEncodingDetector::detect()`'s shortlist but KOI8-U, which
+reads Russian text as KOI8-R does. English carries no non-ASCII at all, which is its purpose.
 
 Russian does not come from Project Gutenberg, which holds nine Russian entries: the three prose works among
 them are audiobooks carrying no text, leaving an arithmetic textbook and 18th-century odes. Neither resembles

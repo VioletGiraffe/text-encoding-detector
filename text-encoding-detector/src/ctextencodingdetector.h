@@ -3,6 +3,7 @@
 #include "trigramfrequencytables/ctrigramfrequencytable_base.h"
 
 #include <memory>
+#include <span>
 #include <vector>
 
 class CTrigramFrequencyTable_Base;
@@ -39,9 +40,14 @@ public:
 
 	[[nodiscard]] static DecodedText decodeUtfBom(const QByteArray& textData);
 
-	// Scores the whole of 'textData' under every shortlisted codec. The results are sorted by score from best to worst.
+	// Scores the whole of 'textData' under every codec of the shortlist and the locale's, against every table.
+	// The results are sorted by score from best to worst. Wide encodings and UTF-8 are decode()'s business, not this.
 	[[nodiscard]] static std::vector<EncodingDetectionResult>
 	detect(const QByteArray& textData, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages = std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>());
+
+	// The 8-bit codecs detect() tries, by the Qt names it resolves them with. Order breaks a tie between codecs
+	// that read the same bytes as the same text.
+	[[nodiscard]] static std::span<const char* const> codecShortlist() noexcept;
 
 	static constexpr qsizetype detectionSampleBudget = 256 * 1024;
 	// Small chunks rather than few large ones: the ASCII around a non-ASCII byte decodes the same under every

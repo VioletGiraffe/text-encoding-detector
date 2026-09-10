@@ -59,7 +59,7 @@ run, or open `tests/text-encoding-detector-tests.pro` directly.
 | --- | --- |
 | `benchmark_corpus.{h,cpp}` | the corpus: decoding, slicing, encoding into a named codec |
 | `mixed_content_scenarios.{h,cpp}` | each language whole and mixed into three hosts at three shares in three shapes |
-| `ctextencodingdetector_tests.cpp` | correctness: the corpus contract; `decode()` over every language, the second author, every mixed-content scenario whole and grown past the sample budget, with the winning score capped at 0.90; the wide encodings with and without a mark; binary declined |
+| `ctextencodingdetector_tests.cpp` | correctness: the corpus contract and the shortlist resolving; `decode()` over every language, the second author, every mixed-content scenario whole and grown past the sample budget, in every codec, with the winning score capped at 0.90; the wide encodings with and without a mark; binary declined |
 | `ctextencodingdetector_benchmarks.cpp` | what `decode()` costs and where the cost goes |
 | `trigram_container_benchmarks.cpp` | the trigram table's container and key shape |
 | `detection_window_study.cpp` | how little of a file detection can read and still be right |
@@ -76,7 +76,7 @@ CI (`.github/workflows/CI.yml`) builds the tests and `text-analyzer` on Windows,
 tests, and runs the benchmarks with a handful of samples as a smoke test only: a shared runner's timings are
 not comparable to the numbers below.
 
-Benchmarks and the study are hidden behind tags; a plain run is mostly the mixed-content matrix, about six
+Benchmarks and the study are hidden behind tags; a plain run is mostly the mixed-content matrix, about nine
 seconds on the machine above. The benchmark reporter is
 `cpp-template-utils/tests/catch_benchmark_reporter.hpp`, which reports the mean of the fastest third of the
 samples — interference only ever adds time, so the fastest samples are the honest ones.
@@ -112,22 +112,22 @@ NUL byte — runs the detection, on the whole input up to 256 KB and on a sample
 | input | 64 KB | 256 KB | 1.3 MB |
 | --- | --- | --- | --- |
 | valid UTF-8 | 580 µs | 2.40 ms | 7.65 ms |
-| Windows-1251, five language tables | 9.01 ms | 31.9 ms | 41.8 ms at 768 KB |
+| Windows-1251, eleven codecs, five language tables | 10.1 ms | 38.6 ms | 48.8 ms at 768 KB |
 | binary on the slow route (the test executable, measured before the guard) | 17.0 ms | 58.3 ms | — |
 
 BOM-less UTF-16LE, the wide route: 859 µs at 128 KB, 3.44 ms at 512 KB, 10.4 ms at 1.5 MB — about 6.8 ms per
 MB, the fast route's class.
 
-**Roughly 5.6 ms per MB on the fast route against ~130 ms per MB on the slow one, which the sample caps.** Past
-256 KB the slow route costs the 32 ms of a 256 KB detection, two passes over the bytes and one decode of the
-whole input: 41.8 ms at 768 KB. Binary is worse than text, because garbage produces more distinct trigrams than
+**Roughly 5.6 ms per MB on the fast route against ~150 ms per MB on the slow one, which the sample caps.** Past
+256 KB the slow route costs the 39 ms of a 256 KB detection, two passes over the bytes and one decode of the
+whole input: 48.8 ms at 768 KB. Binary is worse than text, because garbage produces more distinct trigrams than
 language does; the guard stops anything with a NUL byte at that byte, and the row above is what a binary file
 without one still costs.
 
 Each language table is one more scoring pass per codec; the model's own norm is precomputed at construction,
 and only the sample's non-ASCII trigrams are looked up, so a pass is cheap next to `parse()`.
 
-Where the slow route's time goes, per codec, at 256 KB — and `detect()` tries about a dozen:
+Where the slow route's time goes, per codec, at 256 KB — and `detect()` tries eleven, plus the locale's:
 
 | phase | cost | share |
 | --- | --- | --- |
@@ -330,6 +330,27 @@ budgets; its columns are unchanged except Polish prose, which at 24 KB fits the 
 whole. The tests grow the sparsest scenarios (1% prose) and the densest (pure prose) to twice the budget by
 repetition and require the same recovery under the same cap.
 
+**19. The shortlist is eleven 8-bit codecs, and `detect()` no longer tries the Unicode ones.** Added:
+ISO-8859-5, Windows-1252, ISO-8859-15, macintosh (Mac Roman) and Windows-1250; the corpus is lossless in all
+of them, so every scenario now runs in every codec its language has — 392 codec-cases, whole and sampled,
+none wrong. Removed: UTF-8, UTF-16 and UTF-32, which `decode()` settles before `detect()` runs and which
+could only ever have produced a mangled runner-up. Mac Cyrillic and Mac Central European are not there
+because Qt without ICU has no codec for them; a test now checks that every shortlist name resolves, since
+`detect()` drops one it cannot without a word. Three things worth knowing:
+
+- Windows-1252 and ISO-8859-15 write the corpus texts to the same bytes ISO-8859-1 does, and Windows-1250
+  shares every Polish letter with ISO-8859-2 but ą, Ą, Ś and Ź. Codecs that read the same bytes as the same
+  text tie on score, and the shortlist's order breaks the tie: the Windows one first, being the likelier.
+- Because of that, the Polish *margin* — the winner against the closest reading that decodes differently —
+  collapses from 0.66–0.81 to 0.01: the ISO-8859-2 and Windows-1250 readings of a Polish text differ in a few
+  letters and score almost alike. The winner is still right on every Polish case in both encodings, whole and
+  anchored; it is decided by the ą's. The margin was never a gate (finding 12), and this is one more reason it
+  cannot be. The blind 16 KB spread sample, which ships nowhere, now picks the twin on three Polish 5% cases
+  it used to get right: a window with too few ą's in it cannot tell them apart.
+- Cost: the five added codecs each decode to a full text of letters, where the removed Unicode readings of
+  8-bit bytes decoded to little that parsed. The slow route is ~20% dearer: 10.1 ms at 64 KB, 38.6 ms at
+  256 KB, 48.8 ms at 768 KB.
+
 ### The design these point to
 
 1. Score only trigrams carrying a non-ASCII character — done, in the library (finding 13).
@@ -358,7 +379,5 @@ and a synthetic input that is wrong in a way you have not thought of returns a c
 - A binary file without a NUL byte runs the full detection. Above a few hundred bytes such files barely exist,
   and the outcome is a decline either way, so this is a cost, not a wrong answer.
 - The text viewer's explicit "as UTF-8" action does not use the binary guard.
-- Codecs outside `detect()`'s shortlist are unmeasured: Windows-1250 Polish, ISO-8859-5 or MacCyrillic Russian
-  and Windows-1252 Western European are read as their nearest listed neighbour, so they end as a decline or as
-  mojibake, and nothing in the corpus says which. Adding a codec to the shortlist is cheap; the matrix then
-  covers it.
+- Mac Cyrillic and Mac Central European text is read as its nearest listed neighbour, a decline or mojibake:
+  Qt has no codec for either.

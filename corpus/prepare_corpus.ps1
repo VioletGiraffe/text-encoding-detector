@@ -51,14 +51,16 @@ $ErrorActionPreference = 'Stop'
 # benchmark ladder.
 # id: a Project Gutenberg ebook. revisions: Wikisource page revisions, one per chapter, in order. Neither: local.
 $cyrillicExtra = [ordered]@{ ([char]0x00AB) = '"'; ([char]0x00BB) = '"'; ([char]0x2116) = 'No.' }
+$western = @(28591, 1252, 28605, 10000);        $westernCodecs = 'ISO-8859-1, Windows-1252, ISO-8859-15, macintosh'
+$cyrillic = @(1251, 20866, 866, 28595);         $cyrillicCodecs = 'Windows-1251, KOI8-R, CP866, ISO-8859-5'
 $sources = @(
     @{ file = 'english.txt'; id = 1342;  max = 800000; test = 200000; codepages = @();                 codecs = 'ASCII' }
-    @{ file = 'french.txt';  id = 62215; max = 800000; test = 150000; codepages = @(28591);            codecs = 'ISO-8859-1' }
-    @{ file = 'german.txt';  id = 50285; max = 800000; test = 100000; codepages = @(28591);            codecs = 'ISO-8859-1' }
-    @{ file = 'spanish.txt'; id = 2000;  max = 800000; test = 200000; codepages = @(28591);            codecs = 'ISO-8859-1' }
-    @{ file = 'polish.txt';  id = 34079; max = 800000; test = 24000;  codepages = @(28592);            codecs = 'ISO-8859-2' }
-    @{ file = 'russian.txt'; max = 0; test = 800000; codepages = @(1251, 20866, 866); codecs = 'Windows-1251, KOI8-R, CP866'; extra = $cyrillicExtra }
-    @{ file = 'russian-kuprin.txt'; max = 0; test = 0; codepages = @(1251, 20866, 866); codecs = 'Windows-1251, KOI8-R, CP866'; extra = $cyrillicExtra
+    @{ file = 'french.txt';  id = 62215; max = 800000; test = 150000; codepages = $western;             codecs = $westernCodecs }
+    @{ file = 'german.txt';  id = 50285; max = 800000; test = 100000; codepages = $western;             codecs = $westernCodecs }
+    @{ file = 'spanish.txt'; id = 2000;  max = 800000; test = 200000; codepages = $western;             codecs = $westernCodecs }
+    @{ file = 'polish.txt';  id = 34079; max = 800000; test = 24000;  codepages = @(28592, 1250);        codecs = 'ISO-8859-2, Windows-1250' }
+    @{ file = 'russian.txt'; max = 0; test = 800000; codepages = $cyrillic; codecs = $cyrillicCodecs; extra = $cyrillicExtra }
+    @{ file = 'russian-kuprin.txt'; max = 0; test = 0; codepages = $cyrillic; codecs = $cyrillicCodecs; extra = $cyrillicExtra
        revisions = @(1360689, 1213688, 1360690, 1360691, 5063471, 1214114, 1360692, 1214373, 5062977, 5351114, 1360764, 1214514,
                      5062978, 1360765, 5062979, 1360766, 1215146, 5062980, 5062982, 1215232, 1215267, 1215719, 1215721) }
 )
