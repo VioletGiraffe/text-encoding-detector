@@ -329,8 +329,6 @@ and a synthetic input that is wrong in a way you have not thought of returns a c
 - The NUL guard is broad both ways: a NUL-terminated text file is declined, and a binary file without a NUL
   byte still runs the full detection.
 - The text viewer's explicit "as UTF-8" action does not use the binary guard.
-- The study's "non-ASCII only" columns measure the byte-level filter of finding 10, which is dead by design,
-  and the context sweep answered its question. Both are due for removal.
 - Codecs outside `detect()`'s shortlist are unmeasured: Windows-1250 Polish, ISO-8859-5 or MacCyrillic Russian
   and Windows-1252 Western European are read as their nearest listed neighbour, so they end as a decline or as
   mojibake, and nothing in the corpus says which. Adding a codec to the shortlist is cheap; the matrix then

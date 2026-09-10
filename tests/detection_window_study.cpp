@@ -33,7 +33,6 @@ RESTORE_COMPILER_WARNINGS
 //
 // Sampling schemes at an equal byte budget:
 //   prefix   - the first N bytes, which is what the simplest bounded window does
-//   placed   - N contiguous bytes, reported at the worst of several placements
 //   spread   - N/k bytes at k points spread evenly over the file, blind to content
 //   anchored - N/k bytes at k points spread over the non-ASCII bytes, which are what decide the encoding
 //
@@ -47,9 +46,6 @@ constexpr int chunkCount = 8;
 // Many small windows rather than few large ones: a window centred on a non-ASCII byte carries its ASCII
 // surroundings in with it, and those surroundings are what drown the signal in a mostly-ASCII file.
 constexpr qsizetype denseChunkBytes = 128;
-// Bytes kept around each anchor, swept to find where the surroundings start costing more than they carry
-constexpr qsizetype contextSizes[] = { 1, 4, 16, 64, 256, 1024 };
-constexpr qsizetype contextSweepBudget = 65536;
 constexpr int nameWidth = 30;
 
 // k chunks of budget/k bytes, spread from the start of the data to its end
@@ -97,28 +93,6 @@ constexpr int nameWidth = 30;
 	}
 
 	return sample;
-}
-
-// Only the bytes the candidates disagree about. parse() already skips non-letters and carries its trigram
-// window across them, so dropping every ASCII byte leaves the text's own trigrams less the English ones -
-// which is the strict filter, applied to the bytes instead of to the parser.
-// budget < 0 keeps the whole file; otherwise the kept bytes are spread over it rather than taken from the front.
-[[nodiscard]] QByteArray nonAsciiOnly(const QByteArray& data, qsizetype budget)
-{
-	QByteArray kept;
-	kept.reserve(budget > 0 ? budget : data.size());
-
-	for (qsizetype i = 0; i < data.size(); ++i)
-	{
-		if (static_cast<unsigned char>(data[i]) >= 0x80)
-			kept.append(data[i]);
-	}
-
-	if (budget < 0 || kept.size() <= budget)
-		return kept;
-
-	// Every nth byte would splice unrelated letters together; whole runs keep the trigrams a text really has
-	return anchoredSample(kept, budget, denseChunkBytes);
 }
 
 // Two readings that part over a handful of characters are one answer: KOI8-R and KOI8-U differ in eight code
@@ -262,63 +236,26 @@ TEST_CASE("Detection accuracy against the size and placement of the sample it re
 		return outcome;
 	};
 
-	std::cout << "\n=== standalone: the whole file, before and after dropping the ASCII ===\n"
-		<< std::setw(nameWidth) << "content" << "   whole file (today)     non-ASCII only        kept\n";
-
-	for (size_t i = 0; i < all.size(); ++i)
-	{
-		const Outcome whole = overScenario(i, [](const QByteArray& data) { return data; });
-		const Outcome filtered = overScenario(i, [](const QByteArray& data) { return nonAsciiOnly(data, -1); });
-		const qsizetype keptShare = 100 * nonAsciiOnly(encodedScenarios[i][0], -1).size() / encodedScenarios[i][0].size();
-
-		std::cout << std::setw(nameWidth) << all[i].name << "   " << formatted(whole) << "  " << formatted(filtered)
-			<< "  " << std::setw(3) << keptShare << "%\n";
-	}
-
 	for (const qsizetype budget : windowSizes)
 	{
 		std::cout << "\n=== composed: sample budget " << budget / 1024 << " KB ===\n"
 			<< std::setw(nameWidth) << "content" << "   prefix (blind)         spread " << chunkCount << " (blind)      anchored "
-			<< denseChunkBytes << "B            non-ASCII only\n";
+			<< denseChunkBytes << "B\n";
 
 		for (size_t i = 0; i < all.size(); ++i)
 		{
 			const Outcome prefix = overScenario(i, [budget](const QByteArray& data) { return data.left(budget); });
 			const Outcome spread = overScenario(i, [budget](const QByteArray& data) { return spreadSample(data, budget, chunkCount); });
 			const Outcome anchored = overScenario(i, [budget](const QByteArray& data) { return anchoredSample(data, budget, denseChunkBytes); });
-			const Outcome filtered = overScenario(i, [budget](const QByteArray& data) { return nonAsciiOnly(data, budget); });
 
 			std::cout << std::setw(nameWidth) << all[i].name
 				<< "   " << formatted(prefix)
 				<< "  " << formatted(spread)
-				<< "  " << formatted(anchored)
-				<< "  " << formatted(filtered) << "\n";
+				<< "  " << formatted(anchored) << "\n";
 		}
 	}
 
-	std::cout << "\n=== context kept around each anchor, at a " << contextSweepBudget / 1024 << " KB budget ===\n"
-		<< std::setw(nameWidth) << "content";
-	for (const qsizetype context : contextSizes)
-		std::cout << std::setw(11) << context << "B    ";
-
-	std::cout << "\n";
-
-	for (size_t i = 0; i < all.size(); ++i)
-	{
-		std::cout << std::setw(nameWidth) << all[i].name;
-		for (const qsizetype context : contextSizes)
-		{
-			const Outcome outcome = overScenario(i, [context](const QByteArray& data) {
-				return anchoredSample(data, contextSweepBudget, context);
-			});
-
-			std::cout << "  " << formatted(outcome);
-		}
-
-		std::cout << "\n";
-	}
-
-	std::cout << "\n=== confidence: the winner against the closest reading that decodes differently ===\n"
+	std::cout << "\n=== whole file and the 64 KB anchored sample: the winner against the closest reading that decodes differently ===\n"
 		<< "A run-time guard can see this; it cannot see whether the winner is right.\n"
 		<< std::setw(nameWidth) << "content" << "   whole file (today)      anchored 128B, 64 KB\n";
 
