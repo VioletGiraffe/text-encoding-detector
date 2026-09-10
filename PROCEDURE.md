@@ -248,6 +248,48 @@ never reaches `detect()`. The minimum occurrence count a trigram needs to be kep
 every score and margin in the study moved by 0.01 or less, while the tables grew three- to four-fold. Counts
 weight the cosine, and a trigram seen twice weighs nothing beside one seen a thousand times. The cut stays at 10.
 
+**15. The original tables against the regenerated ones, with and without the filter.** The original English
+and Russian pair (commit `fec47f7`) and the six regenerated with their ASCII rows still in (`b27ed4e`) were
+compiled into the study under renamed classes and scored on the whole file of every scenario by a study-local
+copy of `cosineDistance()` with the filter as a switch. 184 codec-cases — Russian counts three:
+
+| table set | scoring | wrong | declined |
+| --- | --- | --- | --- |
+| original pair | unfiltered — the detector as it shipped | **184** | 0 |
+| original pair | filtered | 0 | 112 — every Western European case, having no table |
+| regenerated six | unfiltered | 168 | 0 |
+| regenerated six | filtered | **0** | **0** |
+
+The shipped detector was right on pure Russian prose and nothing else in the study, pure French, German,
+Spanish and Polish prose included, all at full confidence. The filter alone rescues the original pair from
+wrong to declined; the tables alone rescue only pure prose; both together are the current state.
+
+On Russian, where the two sets can be compared directly, the regenerated 5,965-entry table beats the
+original 14,662-entry one on every row: pure prose 0.02 with a margin of 0.92 against 0.12 and 0.81, and at
+1% 0.41 / 0.54 against 0.44 / 0.50. Size did not help. One caveat: the Russian test prefix and the training
+half are the same novel, so the regenerated table has an author's-vocabulary advantage on this test set that
+the original does not. A second Russian work as the test text would settle it; the margins say it would not
+change the verdict.
+
+The experimental tables and the comparison code were not kept; the recipe is above, and the study's `judge()`
+takes a scorer so the next comparison needs only the tables.
+
+**16. The same two Russian tables on nineteen texts by other authors** — the original table's own training
+set (the untracked `trigramfrequencytables/1/`, not committable: contemporary authors), which the regenerated
+table has never seen. First 200 K characters of each, pure and as 1% lines in English prose, worst of the
+three Cyrillic codecs, both tables scored with the filter. **Every case is correct for both tables.** Scores:
+
+| | regenerated, single novel | original, trained on these texts |
+| --- | --- | --- |
+| pure prose | 0.08–0.24, margin 0.70–0.85 | 0.04–0.11, margin 0.81–0.88 |
+| 1% lines | 0.43–0.72, margin 0.26–0.52 | 0.36–0.67, margin 0.30–0.58 |
+
+Each table is ahead by 0.05–0.10 on the author it was trained on and behind by as much on the other's, so the
+in-author advantage of finding 15 and this out-of-author deficit are the same effect from both sides; the
+generalization gap of a one-novel table is smaller than either. Correctness is not at stake at these margins.
+If the Russian score headroom is ever wanted — the worst case here is 0.72 against the 0.95 threshold — a
+second and third public-domain author in `corpus/train/` is the lever, not table size.
+
 ### The design these point to
 
 1. Score only trigrams carrying a non-ASCII character — done, in the library.

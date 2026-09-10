@@ -13,6 +13,7 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <iterator>
@@ -303,13 +304,19 @@ struct Outcome
 	}
 };
 
+using DetectionResults = std::vector<CTextEncodingDetector::EncodingDetectionResult>;
+using Scorer = std::function<DetectionResults(const QByteArray&)>;
+
+// The library's own detection; a scorer of the study's own can stand in to try a scoring the library does not have
+const Scorer libraryDetect = [](const QByteArray& sample) { return CTextEncodingDetector::detect(sample); };
+
 // The sample chooses the encoding; the whole file is what that choice has to decode correctly
-[[nodiscard]] Outcome judge(const QByteArray& sample, const QByteArray& wholeFile, QTextCodec* correctCodec)
+[[nodiscard]] Outcome judge(const QByteArray& sample, const QByteArray& wholeFile, QTextCodec* correctCodec, const Scorer& score = libraryDetect)
 {
 	Outcome outcome;
 	outcome.samples = 1;
 
-	const auto results = CTextEncodingDetector::detect(sample);
+	const DetectionResults results = score(sample);
 	// decode() discards a best score of 0.95 or worse and returns nothing at all
 	if (results.empty() || results.front().score >= 0.95)
 	{
