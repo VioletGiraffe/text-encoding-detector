@@ -13,3 +13,7 @@ Makefile.*
 *.user
 
 .vs/
+
+# Analyzer input corpora: too large to track, and text-analyzer takes the folder as an argument
+text-encoding-detector/src/trigramfrequencytables/1/
+text-encoding-detector/src/trigramfrequencytables/test.txt

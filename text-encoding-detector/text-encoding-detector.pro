@@ -57,14 +57,5 @@ win32*:!*msvc2012:*msvc*:!*msvc2010:*msvc* {
 	QMAKE_CXXFLAGS += /FS
 }
 
-HEADERS += \
-	src/ctextparser.h \
-	src/trigramfrequencytables/ctrigramfrequencytable_english.h \
-	src/trigramfrequencytables/ctrigramfrequencytable_russian.h \
-	src/ctextencodingdetector.h
-
-SOURCES += \
-	src/ctextparser.cpp \
-	src/trigramfrequencytables/ctrigramfrequencytable_english.cpp \
-	src/trigramfrequencytables/ctrigramfrequencytable_russian.cpp \
-	src/ctextencodingdetector.cpp
+# Shared with ../tests, which compiles the same sources under its own flags instead of linking this library
+include($$PWD/text-encoding-detector.pri)
