@@ -106,20 +106,20 @@ points, and a single box-drawing glyph would otherwise register as a different v
 **`decode()` takes one of four routes, and only the bytes of the input decide which.** A byte order mark
 names the encoding outright. A NUL byte anywhere is either BOM-less UTF-16/32, told by the phase its NULs keep
 (finding 17), or binary, declined before any probe runs. Valid UTF-8, pure ASCII included, is answered by
-`isUtf8()` and never reaches `detect()`. Everything else — every 8-bit encoding, and any binary file without a
+`decodeUtf8()` and never reaches `detect()`. Everything else — every 8-bit encoding, and any binary file without a
 NUL byte — runs the detection, on the whole input up to 256 KB and on a sample of that size past it (finding 18).
 
 | input | 64 KB | 256 KB | 1.3 MB |
 | --- | --- | --- | --- |
-| valid UTF-8 | 585 µs | 2.33 ms | 7.51 ms |
-| Windows-1251, eleven codecs, five language tables | 5.55 ms | 19.8 ms | 28.9 ms at 768 KB |
+| valid UTF-8 | 205 µs | 805 µs | 2.74 ms |
+| Windows-1251, eleven codecs, five language tables | 5.04 ms | 18.3 ms | 25.2 ms at 768 KB |
 
-BOM-less UTF-16LE, the wide route: 770 µs at 128 KB, 3.21 ms at 512 KB, 9.91 ms at 1.5 MB — about 6.6 ms per
-MB, the fast route's class.
+BOM-less UTF-16LE, the wide route: 758 µs at 128 KB, 3.19 ms at 512 KB, 9.66 ms at 1.5 MB — about 6.4 ms per MB,
+three times the UTF-8 route, since it counts NUL bytes and then confirms the result reads as text.
 
-**Roughly 5.6 ms per MB on the fast route against about 79 ms per MB on the slow one, which the sample caps.**
-Past 256 KB the slow route costs the 20 ms of a 256 KB detection, two passes over the bytes and one decode of the
-whole input: 28.9 ms at 768 KB. Binary is worse than text at the same size, because garbage produces more distinct
+**Roughly 2.0 ms per MB on the fast route against about 71 ms per MB on the slow one, which the sample caps.**
+Past 256 KB the slow route costs the 18 ms of a 256 KB detection, two passes over the bytes and one decode of the
+whole input: 25.2 ms at 768 KB. Binary is worse than text at the same size, because garbage produces more distinct
 trigrams than language does; the guard stops anything with a NUL byte at that byte, and a binary file without one
 still runs the whole detection.
 
@@ -158,13 +158,13 @@ Per 128 K characters, the whole `decode()` call on the slow route:
 
 | input | `decode()` |
 | --- | --- |
-| 1% Cyrillic clustered in a JSON host | 2.5 ms |
-| 5% Cyrillic interleaved into C source | 6.1 ms |
-| French prose, ISO-8859-1 | 7.2 ms |
-| Russian prose, Windows-1251 | 10.8 ms |
+| 1% Cyrillic clustered in a JSON host | 2.4 ms |
+| 5% Cyrillic interleaved into C source | 6.0 ms |
+| French prose, ISO-8859-1 | 7.0 ms |
+| Russian prose, Windows-1251 | 10.3 ms |
 
 A file mixed into an ASCII host is the most ASCII input that reaches detection at all — one with no non-ASCII byte
-is valid UTF-8, and `isUtf8()` answers it.
+is valid UTF-8, and `decodeUtf8()` answers it.
 
 ### The trigram container
 
@@ -213,12 +213,12 @@ punctuation marks and every letter before them was dropped. Worse, a text with f
 characters made `parse()` return false, and `detect()` then skipped that codec entirely. Fixed: one loop, one
 predicate, and the sliding window itself signals when it is full.
 
-**2. `isUtf8()` accepts UTF-16 and binary.** It is `fromUtf8(data).toUtf8() == data`, and UTF-16 text in any
-alphabet below U+0800 is entirely bytes under 0x80 — NUL bytes included. Measured on the corpus: **244,338
+**2. The UTF-8 check accepts UTF-16 and binary.** UTF-16 text in any alphabet below U+0800 is entirely bytes
+under 0x80 — NUL bytes included — and those are valid UTF-8. Measured on the corpus: **244,338
 characters of UTF-16LE Russian were accepted as UTF-8** before one U+00A0 broke the spell. The same rule makes
 it the guard that decides "this is text" for binary files, and it says yes to a stream that is 19% NUL.
 `decode()` now declines any input with a NUL byte before probing, which covers both; finding 17 carves the
-wide encodings back out of that rule. `isUtf8()` itself is unchanged: a NUL is valid UTF-8.
+wide encodings back out of that rule. `decodeUtf8()` itself is unchanged: a NUL is valid UTF-8.
 
 **3. Whole-file detection is confident mojibake on mixed content — including Russian.** With real English
 prose as the ASCII half, `detect()` gets *every* mixed scenario wrong at scores of 0.09–0.12, which is maximum
@@ -396,6 +396,20 @@ because Qt without ICU has no codec for them; a test now checks that every short
 - Cost: the five added codecs each decode to a full text of letters, where the removed Unicode readings of
   8-bit bytes decoded to little that parsed. The slow route is ~20% dearer: 10.1 ms at 64 KB, 38.6 ms at
   256 KB, 48.8 ms at 768 KB.
+
+**20. The UTF-8 check decodes once, and a truncated tail is no longer an error.** It was
+`fromUtf8(data).toUtf8() == data`, and the caller then decoded the same bytes again: four passes and three
+allocations to answer one question and discard the answer. `decodeUtf8()` returns the text `QStringDecoder`
+produced and reads `hasError()` off that same pass — 561 → 213 µs at 114 KB and 7.29 → 2.58 ms at 1368 KB,
+measured side by side. The slow route gains as well — 8 to 13% on the Windows-1251 ladder, 2 to 5% on the mixed
+inputs — every input that is neither BOM-carrying nor NUL-carrying paying this check before it falls through.
+The behaviour change is in the tail: a multi-byte sequence the end of
+the input cuts short leaves the decoder with pending state and no error, so a truncated file decodes to the
+characters before the cut. The round trip called that invalid and handed an otherwise sound UTF-8 file to the
+8-bit detector, which mangles all of it or declines it. The mirror case is the price: an 8-bit file that is ASCII
+but for one trailing lead byte now reads as UTF-8, a character short. This needs the stateful decoder:
+`Flag::Stateless` reports the pending tail as an error, and so does `finalize()`, which Qt has only since 6.11 —
+CI builds 6.10.
 
 ### The design these point to
 

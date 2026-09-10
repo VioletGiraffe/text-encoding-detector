@@ -9,6 +9,7 @@
 #include <hash/wheathash.hpp>
 
 DISABLE_COMPILER_WARNINGS
+#include <QStringDecoder>
 #include <QTextCodec>
 RESTORE_COMPILER_WARNINGS
 
@@ -17,6 +18,7 @@ RESTORE_COMPILER_WARNINGS
 #include <cmath>
 #include <string.h> // memcmp
 #include <memory>
+#include <optional>
 #include <ranges>
 
 // cosineDistance(): 0.0 is best, 1.0 means no useful trigram overlap.
@@ -32,10 +34,15 @@ bool isBinary(const QByteArray& data)
 	return data.contains('\0');
 }
 
-bool isUtf8(const QByteArray& data)
+std::optional<QString> decodeUtf8(const QByteArray& data)
 {
-	const QString text = QString::fromUtf8(data);
-	return text.toUtf8() == data;
+	// QString::fromUtf8() substitutes U+FFFD for malformed input without reporting it; the decoder counts it
+	QStringDecoder decoder{ QStringDecoder::Utf8 };
+	QString text = decoder.decode(data);
+	if (decoder.hasError())
+		return {};
+
+	return text;
 }
 
 namespace {
@@ -212,8 +219,8 @@ CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QByteArra
 		return DecodedText{ std::move(text), encoding, {}, 0.0 };
 	}
 
-	if (isUtf8(textData))
-		return DecodedText{QString::fromUtf8(textData), "UTF-8", {}, 0.0};
+	if (auto utf8Text = decodeUtf8(textData))
+		return DecodedText{std::move(*utf8Text), "UTF-8", {}, 0.0};
 
 	const auto detectionResult = detect(anchoredSample(textData), tablesForLanguages);
 	if (!detectionResult.empty() && detectionResult.front().score < plausibleMatchThreshold)

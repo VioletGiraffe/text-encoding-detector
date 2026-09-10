@@ -36,7 +36,7 @@ RESTORE_COMPILER_WARNINGS
 // decode() takes one of four routes, and the bytes of the input alone decide which:
 //   a byte order mark - named outright
 //   a NUL byte anywhere - BOM-less UTF-16/32 by the phase of its NULs, else declined as binary before any probe runs
-//   valid UTF-8, pure ASCII included - isUtf8() answers and detect() never runs
+//   valid UTF-8, pure ASCII included - decodeUtf8() answers and detect() never runs
 //   anything else - every codec in the shortlist decodes a bounded sample of the input, and each decoding is parsed and
 //                   scored; the winner then decodes the whole input once
 // The last route is the one detect()'s own numbers describe, and a binary file without a NUL byte takes it too.
@@ -103,16 +103,17 @@ TEST_CASE("decode(): the whole call", "[!benchmark]")
 
 TEST_CASE("decode(): the UTF-8 shortcut alone", "[!benchmark]")
 {
-	// isUtf8() is the whole cost of the fast route, and decode() then converts the same bytes a second time
+	// decodeUtf8() is the whole of the fast route; what decode() adds is the DecodedText around it
 	for (const qsizetype characters : characterCounts)
 	{
 		if (skipped(characters))
 			continue;
 
 		const QByteArray data = BenchmarkCorpus::encoded(corpusLanguage, "UTF-8", characters);
-		BENCHMARK(caseName("isUtf8", "UTF-8", characters, data.size()))
+		BENCHMARK(caseName("decodeUtf8", "UTF-8", characters, data.size()))
 		{
-			return isUtf8(data);
+			const auto text = decodeUtf8(data);
+			return text ? text->size() : 0;
 		};
 	}
 }
@@ -196,7 +197,7 @@ TEST_CASE("parse(): by script", "[!benchmark]")
 
 // The same range end to end, on the slow route every time. A file mixed into an ASCII host is the detector's
 // most ASCII input that still reaches detection at all: one without a non-ASCII byte is valid UTF-8, and
-// isUtf8() answers it.
+// decodeUtf8() answers it.
 TEST_CASE("decode(): by script", "[!benchmark]")
 {
 	constexpr qsizetype characters = 128 * 1024;

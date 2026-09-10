@@ -3,6 +3,7 @@
 #include "trigramfrequencytables/ctrigramfrequencytable_base.h"
 
 #include <memory>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -11,7 +12,9 @@ class QByteArray;
 
 // A NUL byte anywhere: no 8-bit or UTF-8 text carries one
 [[nodiscard]] bool isBinary(const QByteArray& data);
-[[nodiscard]] bool isUtf8(const QByteArray& data);
+// Empty where the bytes are not UTF-8. A multi-byte sequence the end of the input cuts short is not an error:
+// the characters before it decode, and the partial one is dropped.
+[[nodiscard]] std::optional<QString> decodeUtf8(const QByteArray& data);
 
 class CTextEncodingDetector
 {
