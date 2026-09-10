@@ -132,49 +132,17 @@ constexpr double textJunkMaxShare = 0.001;
 
 }
 
-[[nodiscard]] inline double logProbabilityScore(const CTextParser::OccurrenceTable& model, const CTextParser::OccurrenceTable& sample) noexcept
-{
-	static constexpr double Lmax = 15.0;
-	if (sample.totalTrigramsCount <= 5) // Too little data to draw conclusions
-		return 1e20;
-
-	double totalLoss = 0.0;
-	quint64 totalCount = 0;
-
-	for (const auto& [trigram, stats] : sample.trigramOccurrenceTable)
-	{
-		const quint64 count = stats.rawCount;
-		const auto it = model.trigramOccurrenceTable.find(trigram);
-
-		const double loss =
-			(it != model.trigramOccurrenceTable.end())
-			? std::min(static_cast<double>(it->second.loss), Lmax)
-			: Lmax;
-
-		totalLoss += static_cast<double>(count) * loss;
-		totalCount += count;
-	}
-
-	if (totalCount == 0)
-		return 1e20; // arbitrary large number to represent no match
-
-	return totalLoss / static_cast<double>(totalCount);
-}
-
 // Only the trigrams with a non-ASCII character count, on both sides: the ASCII ones decode the same under every
 // codec and would only dilute. A reading that turns the non-ASCII into replacement characters keeps no trigram
 // at all and scores 1.0; one that maps it to the wrong letters keeps trigrams the table has never seen.
 [[nodiscard]] inline double cosineDistance(const CTrigramFrequencyTable_Base& model, const CTextParser::OccurrenceTable& sample) noexcept
 {
-	const double unknownPenaltyWeight = 0.0; // Adjust this weight to control the penalty for unknown trigrams
 	const auto& modelTable = model.trigramOccurrenceTable().trigramOccurrenceTable;
 	if (modelTable.empty() || sample.trigramOccurrenceTable.empty())
-		return 1.0 + unknownPenaltyWeight;
+		return 1.0;
 
 	double dot = 0.0;
 	double sampleNormSq = 0.0;
-	double unknownCount = 0.0;
-	double sampleTotalCount = 0.0;
 
 	for (const auto& [trigram, sampleStats] : sample.trigramOccurrenceTable)
 	{
@@ -183,31 +151,17 @@ constexpr double textJunkMaxShare = 0.001;
 
 		const double sampleCount = static_cast<double>(sampleStats.rawCount);
 		sampleNormSq += sampleCount * sampleCount;
-		sampleTotalCount += sampleCount;
 
-		const auto modelIt = modelTable.find(trigram);
-		if (modelIt != modelTable.end())
-		{
-			const double modelCount = static_cast<double>(modelIt->second.rawCount);
-			dot += sampleCount * modelCount;
-		}
-		else
-		{
-			unknownCount += sampleCount;
-		}
+		if (const auto modelIt = modelTable.find(trigram); modelIt != modelTable.end())
+			dot += sampleCount * static_cast<double>(modelIt->second.rawCount);
 	}
 
 	const double modelNormSq = model.countsNormSquared();
-	if (modelNormSq <= 0.0 || sampleNormSq <= 0.0 || sampleTotalCount <= 0.0)
-		return 1.0 + unknownPenaltyWeight;
+	if (modelNormSq <= 0.0 || sampleNormSq <= 0.0)
+		return 1.0;
 
 	const double similarity = dot / (std::sqrt(modelNormSq) * std::sqrt(sampleNormSq));
-	const double clampedSimilarity = std::clamp(similarity, 0.0, 1.0);
-
-	const double cosineDistance = 1.0 - clampedSimilarity;
-	const double unknownFraction = unknownCount / sampleTotalCount;
-
-	return cosineDistance + unknownPenaltyWeight * unknownFraction;
+	return 1.0 - std::clamp(similarity, 0.0, 1.0);
 }
 
 template <typename Container, typename Value>
