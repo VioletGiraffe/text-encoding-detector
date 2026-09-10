@@ -26,7 +26,12 @@ inline constexpr Language nonAsciiLanguages[] = {
 	Language::French, Language::German, Language::Spanish, Language::Polish, Language::Russian
 };
 
+// ASCII files the study sprinkles the languages into; test-only, and no table is built from them
+enum class Host { Code, Json };
+
 [[nodiscard]] const char* name(Language language);
+[[nodiscard]] const char* name(Host host);
+[[nodiscard]] const QString& text(Host host);
 
 // The 8-bit codecs this language's text is lossless in, and which detection therefore has to choose between
 [[nodiscard]] std::vector<const char*> codecNames(Language language);

@@ -18,6 +18,7 @@ RESTORE_COMPILER_WARNINGS
 #include <iterator>
 #include <memory>
 #include <random>
+#include <ranges>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -58,36 +59,39 @@ constexpr qsizetype denseChunkBytes = 128;
 // Bytes kept around each anchor, swept to find where the surroundings start costing more than they carry
 constexpr qsizetype contextSizes[] = { 1, 4, 16, 64, 256, 1024 };
 constexpr qsizetype contextSweepBudget = 65536;
-// Bounded by the corpus: English supplies the ASCII half, and Polish is the shortest of the others
+// The length of the English, code and json hosts; a language whose test prefix cannot fill the largest share
+// of it gets shorter scenarios
 constexpr qsizetype scenarioCharacters = 200000;
 constexpr qsizetype interleavedBlockCharacters = 400;
+constexpr qsizetype lineCharacters = 60;
 constexpr double foreignShares[] = { 0.20, 0.05, 0.01 };
+constexpr int nameWidth = 30;
 
-// One contiguous run of prose in a file that is otherwise ASCII, at three fifths of the way in
-[[nodiscard]] QString clustered(const QString& prose, const QString& ascii, double proseShare)
+// One contiguous run of prose in a file that is otherwise the host, at three fifths of the way in
+[[nodiscard]] QString clustered(const QString& prose, const QString& host, double proseShare, qsizetype length)
 {
-	const qsizetype proseCharacters = (qsizetype)(scenarioCharacters * proseShare);
-	const qsizetype start = (scenarioCharacters - proseCharacters) * 3 / 5;
+	const qsizetype proseCharacters = (qsizetype)(length * proseShare);
+	const qsizetype start = (length - proseCharacters) * 3 / 5;
 
-	QString mixed = ascii.left(start);
+	QString mixed = host.left(start);
 	mixed += prose.left(proseCharacters);
-	mixed += ascii.mid(start, scenarioCharacters - mixed.size());
+	mixed += host.mid(start, length - mixed.size());
 
 	return mixed;
 }
 
-// Blocks of prose scattered through ASCII, the way a source file carries comments or a log carries messages
-[[nodiscard]] QString interleaved(const QString& prose, const QString& ascii, double proseShare)
+// Paragraph-sized blocks of prose scattered through the host
+[[nodiscard]] QString interleaved(const QString& prose, const QString& host, double proseShare, qsizetype length)
 {
 	std::mt19937 rng{ 20260910u };
 	std::uniform_real_distribution<double> draw{ 0.0, 1.0 };
 
 	QString mixed;
-	mixed.reserve(scenarioCharacters);
+	mixed.reserve(length);
 
 	qsizetype proseRead = 0;
-	qsizetype asciiRead = 0;
-	while (mixed.size() < scenarioCharacters)
+	qsizetype hostRead = 0;
+	while (mixed.size() < length)
 	{
 		const qsizetype before = mixed.size();
 
@@ -98,23 +102,69 @@ constexpr double foreignShares[] = { 0.20, 0.05, 0.01 };
 		}
 		else
 		{
-			mixed += ascii.mid(asciiRead, interleavedBlockCharacters);
-			asciiRead += interleavedBlockCharacters;
+			mixed += host.mid(hostRead, interleavedBlockCharacters);
+			hostRead += interleavedBlockCharacters;
 		}
 
 		if (mixed.size() == before) // Both sources exhausted, which no share in use here reaches
 			break;
 	}
 
-	return mixed.left(scenarioCharacters);
+	return mixed.left(length);
 }
 
-// Each language whole, and each mixed into English at three shares. The Western European languages carry
-// their non-ASCII characters one at a time inside ASCII words, which is a harder shape for a sampler than
-// Russian's runs of Cyrillic - and it is their own accent density doing it, not a substitution rate.
+// Single lines of prose among the host's own lines, the way a source file carries comments and a log carries
+// messages; the prose is kept at its share of the characters written so far
+[[nodiscard]] QString lined(const QString& prose, const QString& host, double proseShare, qsizetype length)
+{
+	QString mixed;
+	mixed.reserve(length);
+
+	qsizetype proseRead = 0;
+	qsizetype hostRead = 0;
+	qsizetype proseWritten = 0;
+	while (mixed.size() < length)
+	{
+		const qsizetype before = mixed.size();
+
+		if (static_cast<double>(proseWritten) < proseShare * static_cast<double>(mixed.size()))
+		{
+			QString line = prose.mid(proseRead, lineCharacters);
+			proseRead += lineCharacters;
+			line.replace(QChar{ '\n' }, QChar{ ' ' });
+			line += QChar{ '\n' };
+
+			mixed += line;
+			proseWritten += line.size();
+		}
+		else
+		{
+			const qsizetype newline = host.indexOf(QChar{ '\n' }, hostRead);
+			const qsizetype lineEnd = newline < 0 ? host.size() : newline + 1;
+			mixed += host.mid(hostRead, lineEnd - hostRead);
+			hostRead = lineEnd;
+		}
+
+		if (mixed.size() == before)
+			break;
+	}
+
+	return mixed.left(length);
+}
+
+// Each language whole, and each mixed into three hosts at three shares in three shapes. The Western European
+// languages carry their non-ASCII characters one at a time inside ASCII words, which is a harder shape for a
+// sampler than Russian's runs of Cyrillic - and it is their own accent density doing it, not a substitution rate.
 [[nodiscard]] std::vector<Scenario> scenarios()
 {
-	const QString ascii = BenchmarkCorpus::text(BenchmarkCorpus::Language::English).left(scenarioCharacters);
+	struct HostText { const char* name; QString text; };
+	const HostText hosts[] = {
+		{ "prose", BenchmarkCorpus::text(BenchmarkCorpus::Language::English).left(scenarioCharacters) },
+		{ BenchmarkCorpus::name(BenchmarkCorpus::Host::Code), BenchmarkCorpus::text(BenchmarkCorpus::Host::Code).left(scenarioCharacters) },
+		{ BenchmarkCorpus::name(BenchmarkCorpus::Host::Json), BenchmarkCorpus::text(BenchmarkCorpus::Host::Json).left(scenarioCharacters) },
+	};
+
+	constexpr double largestShare = *std::ranges::max_element(foreignShares);
 
 	std::vector<Scenario> all;
 	for (const BenchmarkCorpus::Language language : BenchmarkCorpus::nonAsciiLanguages)
@@ -122,14 +172,19 @@ constexpr double foreignShares[] = { 0.20, 0.05, 0.01 };
 		const std::string name = BenchmarkCorpus::name(language);
 		const std::vector<const char*> codecs = BenchmarkCorpus::codecNames(language);
 		const QString prose = BenchmarkCorpus::text(language).left(scenarioCharacters);
+		const qsizetype length = std::min(scenarioCharacters, static_cast<qsizetype>(static_cast<double>(prose.size()) / largestShare));
 
 		all.push_back(Scenario{ name + " prose", prose, codecs });
 
-		for (const double share : foreignShares)
+		for (const HostText& host : hosts)
 		{
-			const std::string label = name + " " + std::to_string((int)(share * 100)) + "%";
-			all.push_back(Scenario{ label + " clustered", clustered(prose, ascii, share), codecs });
-			all.push_back(Scenario{ label + " interleaved", interleaved(prose, ascii, share), codecs });
+			for (const double share : foreignShares)
+			{
+				const std::string label = name + " " + std::to_string((int)(share * 100)) + "% " + host.name;
+				all.push_back(Scenario{ label + " clustered", clustered(prose, host.text, share, length), codecs });
+				all.push_back(Scenario{ label + " interleaved", interleaved(prose, host.text, share, length), codecs });
+				all.push_back(Scenario{ label + " lines", lined(prose, host.text, share, length), codecs });
+			}
 		}
 	}
 
@@ -306,7 +361,7 @@ TEST_CASE("Detection accuracy against the size and placement of the sample it re
 	REQUIRE(!all.empty());
 
 	std::cout << "\nEach cell: worst winning score, and whether the winner decodes the WHOLE file correctly.\n"
-		<< "Every scenario is " << scenarioCharacters / 1024 << "K characters; the share is how much of it is not English.\n";
+		<< "Scenarios are up to " << scenarioCharacters / 1024 << "K characters; the share is how much of it is not the host.\n";
 
 	// Every scenario encoded once per codec it claims to be written in, which is what each scheme then samples
 	std::vector<std::vector<QTextCodec*>> scenarioCodecs;
@@ -343,7 +398,7 @@ TEST_CASE("Detection accuracy against the size and placement of the sample it re
 	};
 
 	std::cout << "\n=== standalone: the whole file, before and after dropping the ASCII ===\n"
-		<< std::setw(26) << "content" << "   whole file (today)     non-ASCII only        kept\n";
+		<< std::setw(nameWidth) << "content" << "   whole file (today)     non-ASCII only        kept\n";
 
 	for (size_t i = 0; i < all.size(); ++i)
 	{
@@ -351,14 +406,14 @@ TEST_CASE("Detection accuracy against the size and placement of the sample it re
 		const Outcome filtered = overScenario(i, [](const QByteArray& data) { return nonAsciiOnly(data, -1); });
 		const qsizetype keptShare = 100 * nonAsciiOnly(encodedScenarios[i][0], -1).size() / encodedScenarios[i][0].size();
 
-		std::cout << std::setw(26) << all[i].name << "   " << formatted(whole) << "  " << formatted(filtered)
+		std::cout << std::setw(nameWidth) << all[i].name << "   " << formatted(whole) << "  " << formatted(filtered)
 			<< "  " << std::setw(3) << keptShare << "%\n";
 	}
 
 	for (const qsizetype budget : windowSizes)
 	{
 		std::cout << "\n=== composed: sample budget " << budget / 1024 << " KB ===\n"
-			<< std::setw(26) << "content" << "   prefix (blind)         spread " << chunkCount << " (blind)      anchored "
+			<< std::setw(nameWidth) << "content" << "   prefix (blind)         spread " << chunkCount << " (blind)      anchored "
 			<< denseChunkBytes << "B            non-ASCII only\n";
 
 		for (size_t i = 0; i < all.size(); ++i)
@@ -368,7 +423,7 @@ TEST_CASE("Detection accuracy against the size and placement of the sample it re
 			const Outcome anchored = overScenario(i, [budget](const QByteArray& data) { return anchoredSample(data, budget, denseChunkBytes); });
 			const Outcome filtered = overScenario(i, [budget](const QByteArray& data) { return nonAsciiOnly(data, budget); });
 
-			std::cout << std::setw(26) << all[i].name
+			std::cout << std::setw(nameWidth) << all[i].name
 				<< "   " << formatted(prefix)
 				<< "  " << formatted(spread)
 				<< "  " << formatted(anchored)
@@ -377,7 +432,7 @@ TEST_CASE("Detection accuracy against the size and placement of the sample it re
 	}
 
 	std::cout << "\n=== context kept around each anchor, at a " << contextSweepBudget / 1024 << " KB budget ===\n"
-		<< std::setw(26) << "content";
+		<< std::setw(nameWidth) << "content";
 	for (const qsizetype context : contextSizes)
 		std::cout << std::setw(11) << context << "B    ";
 
@@ -385,7 +440,7 @@ TEST_CASE("Detection accuracy against the size and placement of the sample it re
 
 	for (size_t i = 0; i < all.size(); ++i)
 	{
-		std::cout << std::setw(26) << all[i].name;
+		std::cout << std::setw(nameWidth) << all[i].name;
 		for (const qsizetype context : contextSizes)
 		{
 			const Outcome outcome = overScenario(i, [context](const QByteArray& data) {
@@ -400,7 +455,7 @@ TEST_CASE("Detection accuracy against the size and placement of the sample it re
 
 	std::cout << "\n=== confidence: the winner against the closest reading that decodes differently ===\n"
 		<< "A run-time guard can see this; it cannot see whether the winner is right.\n"
-		<< std::setw(26) << "content" << "   whole file (today)      anchored 128B, 64 KB\n";
+		<< std::setw(nameWidth) << "content" << "   whole file (today)      anchored 128B, 64 KB\n";
 
 	for (size_t i = 0; i < all.size(); ++i)
 	{
@@ -415,7 +470,7 @@ TEST_CASE("Detection accuracy against the size and placement of the sample it re
 			return cell.str();
 		};
 
-		std::cout << std::setw(26) << all[i].name << "   " << scoreAndMargin(whole) << "  " << scoreAndMargin(anchored) << "\n";
+		std::cout << std::setw(nameWidth) << all[i].name << "   " << scoreAndMargin(whole) << "  " << scoreAndMargin(anchored) << "\n";
 	}
 
 	std::cout << std::endl;

@@ -21,6 +21,14 @@ case calls for, so each file must survive that encoding unchanged - see the norm
 | Polish | 24,000 | 216,484 | 6.81% | ISO-8859-2 | *Tajemnica Baskerville'ów*, Conan Doyle, tr. Żmijewska, [PG 34079](https://www.gutenberg.org/ebooks/34079) |
 | Russian | 800,000 | 912,686 | 78.08% | Windows-1251, KOI8-R, CP866 | *Anna Karenina*, Tolstoy, supplied locally |
 
+Two more test-only files are *hosts*: ASCII text the window study sprinkles the languages into, alongside the
+English prose. No table is built from them, and they must hold no non-ASCII byte at all.
+
+| file | chars | source |
+| --- | --- | --- |
+| `test/code.txt` | 200,000 | the first 200,000 characters of `sqlite3.c`, the SQLite 3.53.4 amalgamation (public domain) |
+| `test/json.txt` | 200,000 | the first 200,000 characters of a packet-capture log exported as JSON, supplied locally |
+
 The test prefix is at least a tenth of the shortest work and larger where the work affords it: the English one
 is the ASCII half of every mixed-content study scenario, the Russian one spans the benchmark ladder. The
 Gutenberg works are capped at 800,000 characters; Russian is not, being the one work not bounded by its
@@ -66,8 +74,9 @@ where a single non-ASCII character would be a false anchor for a sampler that se
 byte. It fails rather than writing a file that cannot survive its target codecs.
 
 ```
-pwsh ./prepare_corpus.ps1                             # the Gutenberg five
-pwsh ./prepare_corpus.ps1 -RussianSource <path>       # and the russian files
+pwsh ./prepare_corpus.ps1                                             # the Gutenberg five
+pwsh ./prepare_corpus.ps1 -RussianSource <path>                       # and the russian files
+pwsh ./prepare_corpus.ps1 -CodeSource <sqlite3.c> -JsonSource <log>   # and the hosts
 ```
 
 The trigram tables are regenerated from the training halves, one language per run, from the directory the

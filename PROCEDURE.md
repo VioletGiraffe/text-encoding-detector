@@ -72,9 +72,12 @@ samples — interference only ever adds time, so the fastest samples are the hon
 
 ### How the study works
 
-It builds scenarios out of the corpus — each language whole, and each mixed into English at 20%, 5% and 1%,
-clustered in one run or interleaved in 400-character blocks — encodes each into the codecs its language is
-written in, and hands `detect()` a *sample* of the result.
+It builds scenarios out of the corpus — each language whole, and each mixed into three ASCII hosts (English
+prose, C source, a JSON log) at 20%, 5% and 1%, in three shapes: clustered in one run, interleaved in
+400-character blocks, or single 60-character lines among the host's lines, the shape of a comment or a log
+message. 140 scenarios; each is encoded into the codecs its language is written in, and `detect()` is handed a
+*sample* of the result. Scenarios are 200 K characters, shorter where the language's test prefix cannot fill
+the 20% share.
 
 Two rules make its verdicts mean something:
 
@@ -169,7 +172,7 @@ nothing — it only dilutes.
 prefix, or chunks spread evenly — is mojibake on every mixed scenario, at every budget from 16 KB to the whole
 file. It converts a fallback into a silent wrong answer.
 
-**6. Dropping the ASCII fixes it.** Feeding `detect()` only the non-ASCII bytes, in their original runs, gets
+**6. Dropping the ASCII fixes it — for Russian; see finding 10.** Feeding `detect()` only the non-ASCII bytes, in their original runs, gets
 every Russian scenario right — 0.12 for prose, 0.44 at 1% Russian — and makes every Western European scenario
 *decline* rather than lie. It is also nearly free on mixed content: the filtered stream is 15% of a 20% file
 and under 1% of a 1% file. On pure Russian prose it is 77%, so it saves nothing there and a budget cap is what
@@ -180,8 +183,8 @@ the English model to win again, and Western European goes back to mojibake. Keep
 that were never adjacent and manufactures trigrams the file never had. Keeping the non-ASCII bytes *in their
 own runs* avoids both.
 
-**8. The margin discriminates perfectly where the score does not.** Comparing the winner against the closest
-reading that decodes differently:
+**8. The margin discriminates perfectly where the score does not — for Russian; see finding 12.** Comparing
+the winner against the closest reading that decodes differently:
 
 | | correct answers | wrong answers |
 | --- | --- | --- |
@@ -197,15 +200,41 @@ German, Spanish and Polish built from `corpus/train/`: each of the four is now r
 *and* the right language, on whole-file detection, with no other change. The `[!shouldfail]` test that pinned
 the defect is now a plain passing test.
 
-### The design these point to
+**10. Dropping the ASCII bytes destroys Western European detection.** With a table for each language,
+whole-file detection reads French, German, Spanish and Polish prose correctly — and the non-ASCII-only sample
+of the same prose is declined at 0.97–1.00. Those languages carry their non-ASCII characters one at a time
+inside ASCII words; the filtered stream is accented letters back to back, trigrams no table has ever seen. The
+filter worked for Russian because Cyrillic comes in whole words. Finding 6 was a Russian result, not a design.
 
-1. Sample by dropping every ASCII byte, keeping the rest in their original runs, capped at a budget.
-2. Accept the winner only if its margin over the closest differently-decoding candidate is clear.
-3. Otherwise return nothing and let the caller fall back.
+**11. Whole-file detection is mojibake on every mixed scenario in every host, with one exception.** All five
+languages, three hosts, three shapes, three shares: wrong, at scores from 0.01 (English host, maximum
+confidence) through 0.40 (C source) to 0.85 (JSON). The exception is the 20% share in the JSON host, which is
+right for every language: JSON carries almost no letters, so at a fifth prose the prose owns the trigrams. At
+5% it does not. The mixing shape makes no difference at all.
 
-Cost is then constant in file size — about 10 ms — instead of ~127 ms per MB, and correctness improves at the
-same time. Two of the performance items above then stop mattering: with a bounded, filtered sample the
-container choice and the packed key are worth single-digit milliseconds on work that no longer dominates.
+**12. The margin is not a discriminator for Western European text.** Correct whole-file readings of French,
+German and Spanish prose win by 0.00–0.01; Polish by 0.06. Some 98% of a Western European text's trigrams are
+pure ASCII and decode identically under every candidate, including the UTF-8 reading that turns every accent
+into a replacement character — so the whole-text cosine of the right reading and of a mangled one differ by
+about the share of trigrams that carry an accent. Russian margins remain 0.4–0.8. A gate at 0.2 would reject
+every correct Western European answer. Finding 8 was also a Russian result.
+
+### Where this leaves the design
+
+Both halves of the earlier design — drop the ASCII bytes, gate on the margin — hold for Russian only. What
+they got right is the diagnosis: ASCII contributes equal mass to every candidate and only dilutes. What they
+got wrong is the level: bytes. The candidate replacement is the same filter one level up, **at the trigram**:
+
+1. Score only the trigrams that contain at least one non-ASCII character — in the sample, and in the model's
+   norm. A trigram spanning an accent keeps its ASCII neighbours, so it is one the table has seen.
+2. Under that rule a reading that mangles the non-ASCII into replacement characters keeps *no* trigrams and
+   scores 1.0; a reading that maps them to the wrong letters keeps trigrams the table has never seen. The host
+   contributes nothing whichever codec is tried.
+3. The English table then never wins anything, which is correct: English is not an encoding question, and pure
+   ASCII never reaches `detect()`.
+
+Unmeasured. It changes `cosineDistance()` and the table's precomputed norm, so it is a library change, and it
+can be prototyped in the study first by scoring outside the library.
 
 ## What the corpus changed
 

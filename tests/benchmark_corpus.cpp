@@ -28,9 +28,38 @@ const std::array corpusFiles {
 	CorpusFile{ "russian", "russian.txt", { "Windows-1251", "KOI8-R", "CP866" } },
 };
 
+const std::array hostFiles {
+	CorpusFile{ "code", "code.txt", {} },
+	CorpusFile{ "json", "json.txt", {} },
+};
+
 [[nodiscard]] const CorpusFile& fileFor(BenchmarkCorpus::Language language)
 {
 	return corpusFiles[static_cast<size_t>(language)];
+}
+
+[[nodiscard]] const CorpusFile& fileFor(BenchmarkCorpus::Host host)
+{
+	return hostFiles[static_cast<size_t>(host)];
+}
+
+[[nodiscard]] QString readTestFile(const char* fileName)
+{
+	QFile file{ QStringLiteral(CORPUS_DIR "/test/") + QLatin1String(fileName) };
+	return file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()) : QString{}; // The corpus is UTF-8 without a byte order mark
+}
+
+// Each file read once, on first use
+template <size_t N>
+[[nodiscard]] const QString& cachedText(std::array<QString, N>& decoded, std::array<bool, N>& loaded, size_t index, const char* fileName)
+{
+	if (!loaded[index])
+	{
+		loaded[index] = true;
+		decoded[index] = readTestFile(fileName);
+	}
+
+	return decoded[index];
 }
 
 }
@@ -38,6 +67,11 @@ const std::array corpusFiles {
 const char* BenchmarkCorpus::name(Language language)
 {
 	return fileFor(language).name;
+}
+
+const char* BenchmarkCorpus::name(Host host)
+{
+	return fileFor(host).name;
 }
 
 std::vector<const char*> BenchmarkCorpus::codecNames(Language language)
@@ -49,18 +83,14 @@ const QString& BenchmarkCorpus::text(Language language)
 {
 	static std::array<QString, std::size(corpusFiles)> decoded;
 	static std::array<bool, std::size(corpusFiles)> loaded{};
+	return cachedText(decoded, loaded, static_cast<size_t>(language), fileFor(language).fileName);
+}
 
-	const size_t index = static_cast<size_t>(language);
-	if (!loaded[index])
-	{
-		loaded[index] = true;
-
-		QFile file{ QStringLiteral(CORPUS_DIR "/test/") + QLatin1String(fileFor(language).fileName) };
-		if (file.open(QIODevice::ReadOnly))
-			decoded[index] = QString::fromUtf8(file.readAll()); // The corpus is UTF-8 without a byte order mark
-	}
-
-	return decoded[index];
+const QString& BenchmarkCorpus::text(Host host)
+{
+	static std::array<QString, std::size(hostFiles)> decoded;
+	static std::array<bool, std::size(hostFiles)> loaded{};
+	return cachedText(decoded, loaded, static_cast<size_t>(host), fileFor(host).fileName);
 }
 
 QString BenchmarkCorpus::slice(Language language, qsizetype characters)

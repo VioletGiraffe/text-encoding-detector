@@ -5,10 +5,15 @@
 #
 #   pwsh ./prepare_corpus.ps1                                  # the Gutenberg five
 #   pwsh ./prepare_corpus.ps1 -RussianSource <path to Anna Karenina .txt>
+#   pwsh ./prepare_corpus.ps1 -CodeSource <path to sqlite3.c> -JsonSource <path to the packet log>
 #   pwsh ./prepare_corpus.ps1 -OutputDir <path>
 #
 # Each work is split in two: test/<file> is a prefix the tests read, train/<file> is the remainder text-analyzer
 # builds the trigram tables from. Nothing scored by the tests has been seen by the tables.
+#
+# The hosts, code.txt and json.txt, are ASCII files the study sprinkles the languages into. They are test-only,
+# supplied locally like Russian, and must hold no non-ASCII byte: one would be a false anchor for a sampler that
+# seeks them out.
 #
 # Five works come from Project Gutenberg. The sixth, Russian, does not: Gutenberg holds nine Russian entries
 # and the three prose works among them are audiobooks with no text, leaving only an arithmetic textbook and
@@ -29,7 +34,9 @@
 
 param(
     [string]$OutputDir = $PSScriptRoot,
-    [string]$RussianSource = ''
+    [string]$RussianSource = '',
+    [string]$CodeSource = '',
+    [string]$JsonSource = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -127,4 +134,19 @@ foreach ($source in $sources) {
 
     "{0,-12} {1,8} chars: test {2,7}, train {3,8}; non-ASCII {4,5:N2}%, lossless in {5}" -f `
         $source.file, $text.Length, $source.test, ($text.Length - $source.test), (100 * $nonAscii / $text.Length), $source.codecs
+}
+
+$hosts = @(
+    @{ file = 'code.txt'; source = $CodeSource; param = 'CodeSource'; chars = 200000 }
+    @{ file = 'json.txt'; source = $JsonSource; param = 'JsonSource'; chars = 200000 }
+)
+
+foreach ($hostFile in $hosts) {
+    if ([string]::IsNullOrEmpty($hostFile.source)) { "{0,-12} skipped: pass -{1} to rebuild it" -f $hostFile.file, $hostFile.param; continue }
+
+    $text = [System.IO.File]::ReadAllText($hostFile.source, [System.Text.Encoding]::UTF8).Replace("`r`n", "`n").Substring(0, $hostFile.chars)
+    foreach ($ch in $text.ToCharArray()) { if ([int]$ch -ge 0x80) { throw "$($hostFile.file): the source is not pure ASCII" } }
+
+    [System.IO.File]::WriteAllText((Join-Path $OutputDir 'test' $hostFile.file), $text, (New-Object System.Text.UTF8Encoding($false)))
+    "{0,-12} {1,8} chars: test {1,7}, host, ASCII" -f $hostFile.file, $text.Length
 }
