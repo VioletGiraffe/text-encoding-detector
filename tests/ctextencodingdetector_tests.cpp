@@ -10,6 +10,7 @@ RESTORE_COMPILER_WARNINGS
 #include "ctextencodingdetector.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -141,4 +142,80 @@ TEST_CASE("decode() recovers each language from every host, shape and share it i
 		for (const char* codecName : scenario.codecNames)
 			checkRecovered(scenario.name, scenario.text, codecName);
 	}
+}
+
+// Every corpus text, the ASCII hosts included, in each wide encoding with and without a byte order mark: the
+// mark or the layout of the NUL bytes names the encoding, the text is read back exactly and reported as certain
+TEST_CASE("decode() reads UTF-16 and UTF-32, with or without a byte order mark")
+{
+	struct WideCodec { const char* name; const char* bom; int bomSize; };
+	constexpr WideCodec wideCodecs[] = {
+		{ "UTF-16LE", "\xFF\xFE", 2 }, { "UTF-16BE", "\xFE\xFF", 2 }, { "UTF-32LE", "\xFF\xFE\x00\x00", 4 }, { "UTF-32BE", "\x00\x00\xFE\xFF", 4 }
+	};
+
+	const auto check = [&](const char* name, const QString& expected) {
+		for (const WideCodec& codec : wideCodecs)
+		{
+			const QByteArray bare = BenchmarkCorpus::encoded(expected, codec.name);
+			REQUIRE(!bare.isEmpty());
+
+			for (const bool withBom : { false, true })
+			{
+				const QByteArray data = withBom ? QByteArray{ codec.bom, codec.bomSize } + bare : bare;
+				const auto answer = CTextEncodingDetector::decode(data);
+				const qsizetype difference = firstDifference(answer.text, expected);
+
+				INFO(name << " written as " << codec.name << (withBom ? " with" : " without") << " a BOM, read as " << answer.encoding.toStdString()
+					<< " at " << answer.score << "; first difference at " << difference << ": [" << around(answer.text, difference) << "] against ["
+					<< around(expected, difference) << "]");
+
+				CHECK(answer.encoding == QLatin1String{ codec.name });
+				CHECK(answer.score == 0.0);
+				CHECK(difference == -1);
+			}
+		}
+	};
+
+	for (const BenchmarkCorpus::Language language : BenchmarkCorpus::allLanguages)
+		check(BenchmarkCorpus::name(language), sample(BenchmarkCorpus::text(language)));
+
+	for (const BenchmarkCorpus::Host host : { BenchmarkCorpus::Host::Code, BenchmarkCorpus::Host::Json })
+		check(BenchmarkCorpus::name(host), sample(BenchmarkCorpus::text(host)));
+}
+
+// What a NUL byte means outside those layouts, and what a wide layout of the wrong content means
+TEST_CASE("decode() declines binary and NUL-carrying 8-bit text")
+{
+	const auto declines = [](const char* name, const QByteArray& data) {
+		REQUIRE(!data.isEmpty());
+		const auto answer = CTextEncodingDetector::decode(data);
+		INFO(name << ": read as " << answer.encoding.toStdString() << " " << answer.language.toStdString() << " at " << answer.score
+			<< ", " << answer.text.size() << " characters");
+		CHECK(answer.encoding.isEmpty());
+		CHECK(answer.text.isEmpty());
+	};
+
+	declines("the test executable", BenchmarkCorpus::executableBytes(sampleCharacters));
+
+	// A NUL-terminated 8-bit file is binary by the rule every diff tool uses
+	QByteArray terminated = BenchmarkCorpus::encoded(sample(BenchmarkCorpus::text(BenchmarkCorpus::Language::Russian)), "Windows-1251");
+	terminated.append('\0');
+	declines("Windows-1251 text with a trailing NUL", terminated);
+
+	// Little-endian 16-bit integers under 256 have exactly UTF-16LE's NUL layout and decode to Latin-1 and controls
+	QByteArray ramp;
+	for (int i = 0; i < 32768; ++i)
+		ramp.append(static_cast<char>(i & 0xFF)).append('\0');
+	declines("a ramp of little-endian uint16 values", ramp);
+
+	// Quiet 16-bit audio: small values of either sign, high bytes 0x00 or 0xFF
+	QByteArray audio;
+	uint32_t seed = 20260910u;
+	for (int i = 0; i < 32768; ++i)
+	{
+		seed = seed * 1664525u + 1013904223u;
+		const auto value = static_cast<int16_t>(static_cast<int32_t>(seed >> 24) - 128);
+		audio.append(static_cast<char>(value & 0xFF)).append(static_cast<char>((value >> 8) & 0xFF));
+	}
+	declines("quiet little-endian 16-bit audio", audio);
 }

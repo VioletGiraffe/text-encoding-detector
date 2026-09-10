@@ -37,6 +37,101 @@ bool isUtf8(const QByteArray& data)
 	return text.toUtf8() == data;
 }
 
+namespace {
+
+// NUL bytes counted by offset modulo 4. BOM-less UTF-16 and UTF-32 keep their NULs in fixed phases; binary does not.
+struct NulPhases
+{
+	qsizetype count[4] = {};
+	qsizetype positions = 0; // Bytes in each phase, the denominator of a phase's share
+
+	[[nodiscard]] bool any() const noexcept { return count[0] + count[1] + count[2] + count[3] > 0; }
+	[[nodiscard]] double share(int phase) const noexcept { return positions > 0 ? static_cast<double>(count[phase]) / static_cast<double>(positions) : 0.0; }
+};
+
+[[nodiscard]] NulPhases countNulPhases(const QByteArray& data) noexcept
+{
+	NulPhases phases;
+	if (!data.contains('\0')) // memchr first: NUL-free input, the common case, pays one pass at memory speed
+		return phases;
+
+	const char* const bytes = data.constData();
+	for (qsizetype i = 0; i < data.size(); ++i)
+	{
+		if (bytes[i] == '\0')
+			++phases.count[i & 3];
+	}
+
+	phases.positions = data.size() / 4;
+	return phases;
+}
+
+// The share of a phase's bytes that are NUL where the phase is a wide encoding's zero byte, and the most where it is
+// a data byte. Latin text in UTF-16 has every high byte zero; Cyrillic only its spaces and punctuation, about a fifth.
+constexpr double wideZeroPhaseMinShare = 0.10;
+constexpr double wideDataPhaseMaxShare = 0.01;
+// UTF-32's two upper bytes are zero for the whole basic plane
+constexpr double utf32ZeroPhaseMinShare = 0.90;
+
+// The BOM-less wide encoding the NUL layout fits, or nullptr for a binary one. UTF-32 is tried first: its layout
+// passes the UTF-16 test of the same endianness.
+[[nodiscard]] const char* wideEncodingFor(const NulPhases& nuls, qsizetype size) noexcept
+{
+	if (size % 4 == 0)
+	{
+		if (nuls.share(2) >= utf32ZeroPhaseMinShare && nuls.share(3) >= utf32ZeroPhaseMinShare && nuls.share(0) <= wideDataPhaseMaxShare)
+			return "UTF-32LE";
+		if (nuls.share(0) >= utf32ZeroPhaseMinShare && nuls.share(1) >= utf32ZeroPhaseMinShare && nuls.share(3) <= wideDataPhaseMaxShare)
+			return "UTF-32BE";
+	}
+
+	if (size % 2 == 0)
+	{
+		const double even = (nuls.share(0) + nuls.share(2)) / 2.0;
+		const double odd = (nuls.share(1) + nuls.share(3)) / 2.0;
+		if (odd >= wideZeroPhaseMinShare && even <= wideDataPhaseMaxShare)
+			return "UTF-16LE";
+		if (even >= wideZeroPhaseMinShare && odd <= wideDataPhaseMaxShare)
+			return "UTF-16BE";
+	}
+
+	return nullptr;
+}
+
+// An array of small integers has a wide encoding's NUL layout too, and decodes to Latin-1 letters, control
+// characters and replacement characters in equal measure. Text is three quarters letters, digits and whitespace
+// (the JSON host is the lowest of the corpus at 85%), and carries next to no control characters beyond whitespace.
+constexpr double textWordyMinShare = 0.75;
+constexpr double textJunkMaxShare = 0.001;
+
+[[nodiscard]] bool looksLikeText(const QString& text) noexcept
+{
+	if (text.isEmpty())
+		return false;
+
+	qsizetype wordy = 0;
+	qsizetype junk = 0;
+	for (qsizetype i = 0; i < text.size(); ++i)
+	{
+		const QChar ch = text[i];
+		if (ch.isHighSurrogate() && i + 1 < text.size() && text[i + 1].isLowSurrogate())
+		{
+			++i; // A pair is one character outside the basic plane, neither wordy nor junk
+			continue;
+		}
+
+		if (ch.isLetterOrNumber() || ch.isSpace())
+			++wordy;
+		else if (ch.isSurrogate() || ch == QChar::ReplacementCharacter || (ch.category() == QChar::Other_Control && !ch.isSpace()))
+			++junk;
+	}
+
+	const auto size = static_cast<double>(text.size());
+	return static_cast<double>(wordy) >= textWordyMinShare * size && static_cast<double>(junk) <= textJunkMaxShare * size;
+}
+
+}
+
 [[nodiscard]] inline double logProbabilityScore(const CTextParser::OccurrenceTable& model, const CTextParser::OccurrenceTable& sample) noexcept
 {
 	static constexpr double Lmax = 15.0;
@@ -140,12 +235,27 @@ inline bool contains(const Container& container, const Value& value)
 
 CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QByteArray & textData, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
-	// BOM-less UTF-16/32 is declined here too: it carries NUL bytes
-	if (isBinary(textData))
-		return {};
-
 	if (auto decodedText = decodeUtfBom(textData); !decodedText.encoding.isEmpty())
 		return decodedText;
+
+	// The only texts with a NUL byte are BOM-less UTF-16 and UTF-32; anything else that carries one is binary
+	if (const NulPhases nuls = countNulPhases(textData); nuls.any())
+	{
+		const char* const encoding = wideEncodingFor(nuls, textData.size());
+		if (!encoding)
+			return {};
+
+		QTextCodec* const codec = QTextCodec::codecForName(encoding);
+		assert_r(codec);
+		if (!codec)
+			return {};
+
+		QString text = codec->toUnicode(textData);
+		if (!looksLikeText(text))
+			return {};
+
+		return DecodedText{ std::move(text), encoding, {}, 0.0 };
+	}
 
 	if (isUtf8(textData))
 		return DecodedText{QString::fromUtf8(textData), "UTF-8", {}, 0.0};

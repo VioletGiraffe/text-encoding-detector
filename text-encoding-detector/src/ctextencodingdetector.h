@@ -31,6 +31,8 @@ public:
 		double score; // Lower is better, 0.0 means perfect match
 	};
 
+	// In order: a BOM; BOM-less UTF-16/32 by its NUL layout, with any other NUL-carrying input declined as binary;
+	// valid UTF-8; then the 8-bit codecs scored against the language tables. Empty where nothing is plausible.
 	[[nodiscard]] static DecodedText
 	decode(const QByteArray& textData, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages = std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>());
 

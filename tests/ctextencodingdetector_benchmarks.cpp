@@ -31,11 +31,12 @@ RESTORE_COMPILER_WARNINGS
 // hidden: the binary with no arguments runs the tests only.
 //   text-encoding-detector-tests "[!benchmark]" -r fastest --benchmark-no-analysis
 //
-// decode() takes one of three routes, and the bytes of the input alone decide which:
-//   a NUL byte anywhere - declined as binary before any probe runs
+// decode() takes one of four routes, and the bytes of the input alone decide which:
+//   a byte order mark - named outright
+//   a NUL byte anywhere - BOM-less UTF-16/32 by the phase of its NULs, else declined as binary before any probe runs
 //   valid UTF-8, pure ASCII included - isUtf8() answers and detect() never runs
 //   anything else - every codec in the shortlist decodes the whole input, and each decoding is parsed and scored
-// The third route is the one a threshold has to be set against, and a binary file without a NUL byte takes it in full.
+// The last route is the one a threshold has to be set against, and a binary file without a NUL byte takes it in full.
 //
 // detect() is not instrumented. Its total is measured, and the per-codec work it repeats is measured beside it
 // through the same public calls, so the phases can be weighed against the total without touching the library.
@@ -75,8 +76,8 @@ constexpr qsizetype maxCharactersForDetect = 256 * 1024;
 	return BenchmarkCorpus::text(corpusLanguage).size() < characters;
 }
 
-// Only an 8-bit codec leaves decode() without a shortcut: UTF-16 text without a byte order mark is declined
-// as binary on its NUL bytes before any probe runs.
+// Only an 8-bit codec leaves decode() without a shortcut: UTF-16 text without a byte order mark is read off
+// the phase of its NUL bytes before any probe runs.
 [[nodiscard]] bool takesTheSlowRoute(const char* codecName)
 {
 	return std::string_view{ codecName } == eightBitCodecName;
@@ -86,8 +87,8 @@ constexpr qsizetype maxCharactersForDetect = 256 * 1024;
 
 TEST_CASE("decode(): the whole call", "[!benchmark]")
 {
-	// UTF-8 takes the fast route, the 8-bit codec the slow one, and UTF-16LE is declined as binary: its cost is
-	// the byte scan up to the first NUL, which for Cyrillic text is the first space.
+	// UTF-8 takes the fast route, the 8-bit codec the slow one, and UTF-16LE the wide one: a NUL count over the
+	// whole input, the decode, and a pass over the result to confirm it reads as text.
 	for (const char* codecName : { "UTF-8", eightBitCodecName, "UTF-16LE" })
 	{
 		for (const qsizetype characters : characterCounts)

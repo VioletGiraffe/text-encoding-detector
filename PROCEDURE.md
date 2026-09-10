@@ -103,8 +103,9 @@ points, and a single box-drawing glyph would otherwise register as a different v
 
 ## Findings: performance
 
-**`decode()` takes one of three routes, and only the bytes of the input decide which.** A NUL byte anywhere
-declines the input as binary before any probe runs. Valid UTF-8, pure ASCII included, is answered by
+**`decode()` takes one of four routes, and only the bytes of the input decide which.** A byte order mark
+names the encoding outright. A NUL byte anywhere is either BOM-less UTF-16/32, told by the phase its NULs keep
+(finding 17), or binary, declined before any probe runs. Valid UTF-8, pure ASCII included, is answered by
 `isUtf8()` and never reaches `detect()`. Everything else — every 8-bit encoding, and any binary file without a
 NUL byte — runs the full detection.
 
@@ -113,6 +114,9 @@ NUL byte — runs the full detection.
 | valid UTF-8 | 580 µs | 2.40 ms | 7.65 ms |
 | Windows-1251, five language tables | 9.01 ms | 31.9 ms | — |
 | binary on the slow route (the test executable, measured before the guard) | 17.0 ms | 58.3 ms | — |
+
+BOM-less UTF-16LE, the wide route: 859 µs at 128 KB, 3.44 ms at 512 KB, 10.4 ms at 1.5 MB — about 6.8 ms per
+MB, the fast route's class.
 
 **Roughly 5.6 ms per MB on the fast route against ~130 ms per MB on the slow one.** Binary is worse than text,
 because garbage produces more distinct trigrams than language does; the guard stops anything with a NUL byte
@@ -165,8 +169,8 @@ predicate, and the sliding window itself signals when it is full.
 alphabet below U+0800 is entirely bytes under 0x80 — NUL bytes included. Measured on the corpus: **244,338
 characters of UTF-16LE Russian were accepted as UTF-8** before one U+00A0 broke the spell. The same rule makes
 it the guard that decides "this is text" for binary files, and it says yes to a stream that is 19% NUL.
-`decode()` now declines any input with a NUL byte before probing, which covers both — at the price of BOM-less
-UTF-16/32 being declined instead of detected. `isUtf8()` itself is unchanged: a NUL is valid UTF-8.
+`decode()` now declines any input with a NUL byte before probing, which covers both; finding 17 carves the
+wide encodings back out of that rule. `isUtf8()` itself is unchanged: a NUL is valid UTF-8.
 
 **3. Whole-file detection is confident mojibake on mixed content — including Russian.** With real English
 prose as the ASCII half, `detect()` gets *every* mixed scenario wrong at scores of 0.09–0.12, which is maximum
@@ -299,6 +303,20 @@ second and third public-domain author in `corpus/train/` is the lever, not table
 The committed second author, Kuprin, scores 0.12 at 64 K under each of the three Cyrillic codecs, inside the
 pure-prose range above; the tests assert it under 0.90.
 
+**17. BOM-less UTF-16 and UTF-32 are told from binary by where their NUL bytes sit.** Counting NULs by offset
+modulo 4 costs one pass, and only where a memchr has found a NUL at all. A wide text keeps its NULs in fixed
+phases — UTF-16LE in the odd bytes (every one for Latin text, about a fifth for Cyrillic, whose zeros are its
+spaces and punctuation), UTF-32 in two of every four — while binary has them everywhere. A phase counts as the
+zero byte at 10% NUL and as a data byte under 1%. The layout alone is not enough: an array of small 16-bit
+integers has UTF-16LE's layout exactly, and quiet 16-bit audio nearly, so the decoded candidate must also read
+as text — at least three quarters letters, digits and whitespace (the corpus's lowest, the JSON host, is 85%)
+and no more than one in a thousand control or replacement characters. Both synthetic arrays fail that on the
+control characters alone. Every corpus text and both hosts decode exactly in all four wide encodings, with and
+without a mark; a Windows-1251 text with one trailing NUL and the test executable are declined.
+
+Found in passing: since the guard landed, a UTF-16 or UTF-32 file *with* a byte order mark had been declined
+too, because the guard ran ahead of the mark check. The mark is now read first.
+
 ### The design these point to
 
 1. Score only trigrams carrying a non-ASCII character — done, in the library.
@@ -326,8 +344,8 @@ and a synthetic input that is wrong in a way you have not thought of returns a c
 ## Known open items
 
 - `decode()` decodes the winning encoding a second time, having discarded the copy `detect()` made.
-- The NUL guard is broad both ways: a NUL-terminated text file is declined, and a binary file without a NUL
-  byte still runs the full detection.
+- A binary file without a NUL byte runs the full detection. Above a few hundred bytes such files barely exist,
+  and the outcome is a decline either way, so this is a cost, not a wrong answer.
 - The text viewer's explicit "as UTF-8" action does not use the binary guard.
 - Codecs outside `detect()`'s shortlist are unmeasured: Windows-1250 Polish, ISO-8859-5 or MacCyrillic Russian
   and Windows-1252 Western European are read as their nearest listed neighbour, so they end as a decline or as
