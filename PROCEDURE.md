@@ -13,7 +13,8 @@ the remainder, which `text-analyzer` builds the trigram tables from. Nothing the
 a table — scoring text against tables built from that same text would flatter every number here.
 
 There are five tables, not six: an English one would hold only all-ASCII trigrams, which scoring ignores (see
-finding 13), and pure ASCII never reaches `detect()`. English's test prefix is the ASCII host of the study.
+finding 13), and pure ASCII never reaches `detect()`. English's test prefix is the ASCII host of the mixed-content
+scenarios.
 
 The tables are regenerated from the tables directory, one language at a time; the optional last argument is
 the minimum occurrence count a trigram needs to be kept (default 10):
@@ -76,18 +77,18 @@ tests, and runs the benchmarks with a handful of samples as a smoke test only: a
 not comparable to the numbers below.
 
 Benchmarks and the study are hidden behind tags; a plain run is the mixed-content matrix, whole files, about
-five seconds on the machine below. The benchmark reporter is
+five seconds on the machine above. The benchmark reporter is
 `cpp-template-utils/tests/catch_benchmark_reporter.hpp`, which reports the mean of the fastest third of the
 samples — interference only ever adds time, so the fastest samples are the honest ones.
 
 ### How the study works
 
-It builds scenarios out of the corpus — each language whole, and each mixed into three ASCII hosts (English
-prose, C source, a JSON log) at 20%, 5% and 1%, in three shapes: clustered in one run, interleaved in
-400-character blocks, or single 60-character lines among the host's lines, the shape of a comment or a log
-message. 140 scenarios; each is encoded into the codecs its language is written in, and `detect()` is handed a
-*sample* of the result. Scenarios are 200 K characters, shorter where the language's test prefix cannot fill
-the 20% share.
+Its scenarios are those of `mixed_content_scenarios.cpp`, which the tests assert over whole — each language
+whole, and each mixed into three ASCII hosts (English prose, C source, a JSON log) at 20%, 5% and 1%, in three
+shapes: clustered in one run, interleaved in 400-character blocks, or single 60-character lines among the
+host's lines, the shape of a comment or a log message. 140 scenarios; each is encoded into the codecs its
+language is written in, and `detect()` is handed a *sample* of the result. Scenarios are 200 K characters,
+shorter where the language's test prefix cannot fill the 20% share.
 
 Two rules make its verdicts mean something:
 
@@ -207,8 +208,8 @@ mojibake case in the study and keeps every strong correct answer.
 **9. Western European was not detectable with English and Russian tables alone.** Accented Latin matches
 neither the English model, whose trigrams hold no accents, nor the Russian one. Fixed by tables for French,
 German, Spanish and Polish built from `corpus/train/`: each of the four is now read back in the right encoding
-*and* the right language, on whole-file detection, with no other change. The `[!shouldfail]` test that pinned
-the defect is now a plain passing test.
+*and* the right language, on whole-file detection, with no other change. The test that pinned the defect is
+now a plain passing one.
 
 **10. Dropping the ASCII bytes destroys Western European detection.** With a table for each language,
 whole-file detection reads French, German, Spanish and Polish prose correctly — and the non-ASCII-only sample
@@ -274,8 +275,7 @@ On Russian, where the two sets can be compared directly, the regenerated 5,965-e
 original 14,662-entry one on every row: pure prose 0.02 with a margin of 0.92 against 0.12 and 0.81, and at
 1% 0.41 / 0.54 against 0.44 / 0.50. Size did not help. One caveat: the Russian test prefix and the training
 half are the same novel, so the regenerated table has an author's-vocabulary advantage on this test set that
-the original does not. A second Russian work as the test text would settle it; the margins say it would not
-change the verdict.
+the original does not. Finding 16 and the committed second author settle it: the verdict stands.
 
 The experimental tables and the comparison code were not kept; the recipe is above, and the study's `judge()`
 takes a scorer so the next comparison needs only the tables.
@@ -296,11 +296,14 @@ generalization gap of a one-novel table is smaller than either. Correctness is n
 If the Russian score headroom is ever wanted — the worst case here is 0.72 against the 0.95 threshold — a
 second and third public-domain author in `corpus/train/` is the lever, not table size.
 
+The committed second author, Kuprin, scores 0.12 at 64 K under each of the three Cyrillic codecs, inside the
+pure-prose range above; the tests assert it under 0.90.
+
 ### The design these point to
 
 1. Score only trigrams carrying a non-ASCII character — done, in the library.
 2. Sample by anchoring fixed-size chunks on the non-ASCII bytes, at a bounded budget, so the cost stops being
-   ~140 ms per MB. Not yet in the library; `decode()` still reads the whole file.
+   ~130 ms per MB. Not yet in the library; `decode()` still reads the whole file.
 3. Return nothing when the sample holds nothing to score, which the threshold already does.
 
 ## What the corpus changed
@@ -314,8 +317,8 @@ chunks with 64 bytes of context around each anchor looked like the recommended d
 
 Both were wrong. Real English prose matches the English model far better than generated C++ does, which is
 what lets the mangling-codec win outright; and real French, German, Spanish and Polish carry their accents in
-distributions no substitution rate reproduces. The corrected answer — filter, do not merely sample, and gate on
-margin — only appeared once the corpus was real.
+distributions no substitution rate reproduces. The corrected answer — filter, do not merely sample — only
+appeared once the corpus was real.
 
 The lesson generalizes: **for an accuracy study, synthetic inputs are worth exactly as much as their realism,
 and a synthetic input that is wrong in a way you have not thought of returns a confident wrong answer.**
@@ -326,9 +329,9 @@ and a synthetic input that is wrong in a way you have not thought of returns a c
 - The NUL guard is broad both ways: a NUL-terminated text file is declined, and a binary file without a NUL
   byte still runs the full detection.
 - The text viewer's explicit "as UTF-8" action does not use the binary guard.
-- The regenerated Russian table has 5,965 entries against the original's 14,662, which came from a training
-  set several times larger. Whether that costs accuracy is for the study to say, by pulling the original table
-  from git history and scoring both. The occurrence sweep of finding 14 suggests not: what the extra entries
-  would add is the long tail, which the cosine barely weighs.
 - The study's "non-ASCII only" columns measure the byte-level filter of finding 10, which is dead by design,
   and the context sweep answered its question. Both are due for removal.
+- Codecs outside `detect()`'s shortlist are unmeasured: Windows-1250 Polish, ISO-8859-5 or MacCyrillic Russian
+  and Windows-1252 Western European are read as their nearest listed neighbour, so they end as a decline or as
+  mojibake, and nothing in the corpus says which. Adding a codec to the shortlist is cheap; the matrix then
+  covers it.

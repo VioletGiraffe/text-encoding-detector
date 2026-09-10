@@ -17,13 +17,11 @@ RESTORE_COMPILER_WARNINGS
 #include <functional>
 #include <iomanip>
 #include <iostream>
-#include <iterator>
-#include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
 
-// How little of a file detection can read and still decode the whole of it correctly. detect() costs ~110 ms
+// How little of a file detection can read and still decode the whole of it correctly. detect() costs ~130 ms
 // per MB of non-UTF-8 input, all of it linear, so a bounded sample makes the cost constant - if the sample
 // still answers for the file it was drawn from.
 //
@@ -72,7 +70,7 @@ constexpr int nameWidth = 30;
 
 // The same budget, placed where the non-ASCII bytes are: a byte under 0x80 decodes the same under every
 // candidate, so a window holding nothing else cannot choose between them.
-// Finding them costs one scan at memory speed, against detection's ~110 ms per MB.
+// Finding them costs one scan at memory speed, against detection's ~130 ms per MB.
 [[nodiscard]] QByteArray anchoredSample(const QByteArray& data, qsizetype budget, qsizetype chunkSize)
 {
 	std::vector<qsizetype> anchors;
@@ -246,9 +244,7 @@ TEST_CASE("Detection accuracy against the size and placement of the sample it re
 			QTextCodec* const codec = QTextCodec::codecForName(codecName);
 			REQUIRE(codec);
 			codecs.push_back(codec);
-
-			const std::unique_ptr<QTextEncoder> encoder{ codec->makeEncoder(QTextCodec::IgnoreHeader) };
-			perCodec.push_back(encoder->fromUnicode(scenario.text));
+			perCodec.push_back(BenchmarkCorpus::encoded(scenario.text, codecName));
 		}
 
 		scenarioCodecs.push_back(std::move(codecs));
