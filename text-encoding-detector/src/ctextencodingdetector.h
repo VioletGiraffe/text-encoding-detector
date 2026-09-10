@@ -20,6 +20,9 @@ public:
 		QString text;
 		QString encoding;
 		QString language;
+		// Distance of the chosen reading from its language model, lower is better. 0.0 where the bytes prove
+		// the encoding (a BOM, valid UTF-8); 1.0 where nothing was decoded.
+		double score = 1.0;
 	};
 
 	struct EncodingDetectionResult {

@@ -76,7 +76,7 @@ tests, and runs the benchmarks with a handful of samples as a smoke test only: a
 not comparable to the numbers below.
 
 Benchmarks and the study are hidden behind tags; a plain run is the mixed-content matrix, whole files, about
-nine seconds on the machine below. The benchmark reporter is
+five seconds on the machine below. The benchmark reporter is
 `cpp-template-utils/tests/catch_benchmark_reporter.hpp`, which reports the mean of the fastest third of the
 samples — interference only ever adds time, so the fastest samples are the honest ones.
 

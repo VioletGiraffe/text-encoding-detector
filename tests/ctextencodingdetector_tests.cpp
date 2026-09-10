@@ -42,25 +42,20 @@ constexpr double scoreCap = 0.90;
 	return text.mid(qMax(qsizetype{ 0 }, position - 16), 32).toStdString();
 }
 
-// 'expected' written as 'codecName' must come back from decode() unchanged, and detect() must rank that
-// reading first with its score under the cap
+// 'expected' written as 'codecName' must come back from decode() unchanged, with the reading's score under the cap
 void checkRecovered(const std::string& label, const QString& expected, const char* codecName)
 {
 	const QByteArray data = BenchmarkCorpus::encoded(expected, codecName);
 	REQUIRE(!data.isEmpty());
 
-	const auto results = CTextEncodingDetector::detect(data);
-	REQUIRE(!results.empty());
+	const auto answer = CTextEncodingDetector::decode(data);
+	const qsizetype difference = firstDifference(answer.text, expected);
 
-	const QString decoded = CTextEncodingDetector::decode(data).text;
-	const qsizetype difference = firstDifference(decoded, expected);
+	INFO(label << " written as " << codecName << ", read as " << answer.encoding.toStdString() << " " << answer.language.toStdString()
+		<< " at " << answer.score << "; decoded " << answer.text.size() << " of " << expected.size() << " characters, first difference at "
+		<< difference << ": [" << around(answer.text, difference) << "] against [" << around(expected, difference) << "]");
 
-	INFO(label << " written as " << codecName << ", read as " << results.front().encoding.toStdString() << " "
-		<< results.front().language.toStdString() << " at " << results.front().score << "; decoded " << decoded.size()
-		<< " of " << expected.size() << " characters, first difference at " << difference
-		<< ": [" << around(decoded, difference) << "] against [" << around(expected, difference) << "]");
-
-	CHECK(results.front().score < scoreCap);
+	CHECK(answer.score < scoreCap);
 	CHECK(difference == -1);
 }
 

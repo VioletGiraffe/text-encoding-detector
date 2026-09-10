@@ -148,15 +148,16 @@ CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QByteArra
 		return decodedText;
 
 	if (isUtf8(textData))
-		return DecodedText{QString::fromUtf8(textData), "UTF-8", {}};
+		return DecodedText{QString::fromUtf8(textData), "UTF-8", {}, 0.0};
 
 	const auto detectionResult = detect(textData, tablesForLanguages);
 	if (!detectionResult.empty() && detectionResult.front().score < plausibleMatchThreshold)
 	{
-		QTextCodec * codec = QTextCodec::codecForName(detectionResult.front().encoding.toUtf8().data());
+		const auto& best = detectionResult.front();
+		QTextCodec * codec = QTextCodec::codecForName(best.encoding.toUtf8().data());
 		assert_r(codec);
 		if (codec)
-			return DecodedText{codec->toUnicode(textData), detectionResult.front().encoding, detectionResult.front().language};
+			return DecodedText{codec->toUnicode(textData), best.encoding, best.language, best.score};
 	}
 
 	return DecodedText();
@@ -192,7 +193,8 @@ CTextEncodingDetector::DecodedText CTextEncodingDetector::decodeUtfBom(const QBy
 		return DecodedText{
 			codec->toUnicode(textData.constData() + bomEncoding.bytesSize, static_cast<int>(textData.size() - bomEncoding.bytesSize)),
 			bomEncoding.encoding,
-			{}
+			{},
+			0.0
 		};
 	}
 
