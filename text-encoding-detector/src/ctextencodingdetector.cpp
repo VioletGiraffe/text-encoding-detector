@@ -24,7 +24,7 @@ RESTORE_COMPILER_WARNINGS
 // cosineDistance(): 0.0 is best, 1.0 means no useful trigram overlap.
 static constexpr double plausibleMatchThreshold = 0.95;
 
-[[nodiscard]] inline bool startsWithBytes(const QByteArray& data, const char* bytes, int bytesSize) noexcept
+[[nodiscard]] static inline bool startsWithBytes(const QByteArray& data, const char* bytes, int bytesSize) noexcept
 {
 	return data.size() >= bytesSize && ::memcmp(data.constData(), bytes, bytesSize) == 0;
 }
@@ -143,7 +143,7 @@ constexpr double textJunkMaxShare = 0.001;
 // Only the trigrams with a non-ASCII character count, on both sides: the ASCII ones decode the same under every
 // codec and would only dilute. A reading that turns the non-ASCII into replacement characters keeps no trigram
 // at all and scores 1.0; one that maps it to the wrong letters keeps trigrams the table has never seen.
-[[nodiscard]] inline double cosineDistance(const CTrigramFrequencyTable_Base& model, const CTextParser::OccurrenceTable& sample) noexcept
+[[nodiscard]] static inline double cosineDistance(const CTrigramFrequencyTable_Base& model, const CTextParser::OccurrenceTable& sample) noexcept
 {
 	const auto& modelTable = model.trigramOccurrenceTable().trigramOccurrenceTable;
 	if (modelTable.empty() || sample.trigramOccurrenceTable.empty())
@@ -173,7 +173,7 @@ constexpr double textJunkMaxShare = 0.001;
 }
 
 template <typename Container, typename Value>
-inline bool contains(const Container& container, const Value& value)
+static inline bool contains(const Container& container, const Value& value)
 {
 	return std::ranges::find(container, value) != container.end();
 }
