@@ -31,11 +31,12 @@ greaterThan(QT_MAJOR_VERSION, 5) {
 
 DEFINES += CATCH_CONFIG_ENABLE_BENCHMARKING
 
-# The parent's global.pri where this repo is a submodule; a standalone build (CI) restates the one flag from it that matters here
+# The parent's global.pri where this repo is a submodule; a standalone build (CI) restates the flags from it that matter here
 exists(../../global.pri) {
 	include(../../global.pri)
 } else {
 	win*:QMAKE_CXXFLAGS += /utf-8
+	win*:QMAKE_CXXFLAGS_WARN_ON = /W4
 }
 
 CONFIG(debug, debug|release) {
@@ -51,7 +52,6 @@ OBJECTS_DIR = $$PWD/build/$${OUTPUT_DIR}
 
 win* {
 	QMAKE_CXXFLAGS += /MP /Zi /FS /std:c++latest /permissive- /Zc:__cplusplus
-	QMAKE_CXXFLAGS_WARN_ON = /W4
 	DEFINES += WIN32_LEAN_AND_MEAN NOMINMAX
 
 	QMAKE_LFLAGS += /DEBUG

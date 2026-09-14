@@ -11,19 +11,19 @@ UI_DIR      = build
 RCC_DIR     = build
 
 linux*|mac*|freebsd{
-	QMAKE_CXXFLAGS += -pedantic-errors
-	QMAKE_CFLAGS += -pedantic-errors
+	QMAKE_CXXFLAGS_WARN_ON += -pedantic-errors
+	QMAKE_CFLAGS_WARN_ON += -pedantic-errors
 }
 
 win* {
-	QMAKE_CXXFLAGS += /MP /Zi /wd4251 /FS
+	QMAKE_CXXFLAGS += /MP /Zi /FS
 	Debug:QMAKE_CXXFLAGS += /JMC
 	QMAKE_CXXFLAGS += /std:c++latest /permissive- /Zc:__cplusplus /utf-8
 	QMAKE_LFLAGS += /DEBUG
 	Release:QMAKE_LFLAGS += /OPT:REF /OPT:ICF
 
 	DEFINES += WIN32_LEAN_AND_MEAN NOMINMAX
-	QMAKE_CXXFLAGS_WARN_ON = -W4
+	QMAKE_CXXFLAGS_WARN_ON = -W4 /wd4251
 }
 
 INCLUDEPATH += \

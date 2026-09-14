@@ -35,15 +35,14 @@ win*{
 	Debug:QMAKE_CXXFLAGS += /JMC
 	QMAKE_CXXFLAGS += /std:c++latest /permissive- /Zc:__cplusplus
 	DEFINES += WIN32_LEAN_AND_MEAN NOMINMAX
-	QMAKE_CXXFLAGS_WARN_ON = -W4
 
 	Debug:QMAKE_LFLAGS += /INCREMENTAL
 	Release:QMAKE_LFLAGS += /OPT:REF /OPT:ICF
 }
 
 linux*|mac*|freebsd{
-	QMAKE_CXXFLAGS += -pedantic-errors
-	QMAKE_CFLAGS += -pedantic-errors
+	QMAKE_CXXFLAGS_WARN_ON += -pedantic-errors
+	QMAKE_CFLAGS_WARN_ON += -pedantic-errors
 	QMAKE_CXXFLAGS_WARN_ON *= -Wall
 
 	Release:DEFINES += NDEBUG=1
