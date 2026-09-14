@@ -4,9 +4,9 @@
 
 DISABLE_COMPILER_WARNINGS
 #include <QString>
-RESTORE_COMPILER_WARNINGS
 
 #include <boost/unordered/unordered_flat_map.hpp>
+RESTORE_COMPILER_WARNINGS
 
 #include <array>
 #include <cstddef>
