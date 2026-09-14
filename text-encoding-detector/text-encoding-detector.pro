@@ -37,8 +37,6 @@ win*{
 	DEFINES += WIN32_LEAN_AND_MEAN NOMINMAX
 	QMAKE_CXXFLAGS_WARN_ON = -W4
 
-	!*msvc2013*:QMAKE_LFLAGS += /DEBUG:FASTLINK
-
 	Debug:QMAKE_LFLAGS += /INCREMENTAL
 	Release:QMAKE_LFLAGS += /OPT:REF /OPT:ICF
 }
@@ -52,7 +50,7 @@ linux*|mac*|freebsd{
 	Debug:DEFINES += _DEBUG
 }
 
-win32*:!*msvc2012:*msvc*:!*msvc2010:*msvc* {
+win32*:*msvc* {
 	QMAKE_CXXFLAGS += /FS
 }
 

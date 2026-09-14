@@ -1,7 +1,7 @@
 DESTDIR  = bin
 TARGET = text_analyzer
 TEMPLATE = app
-CONFIG += staticlib c++2b console
+CONFIG += c++2b console
 
 QT = core core5compat
 
@@ -13,14 +13,14 @@ RCC_DIR     = build
 linux*|mac*|freebsd{
 	QMAKE_CXXFLAGS += -pedantic-errors
 	QMAKE_CFLAGS += -pedantic-errors
-	QMAKE_CXXFLAGS_WARN_ON = -Wall -Wno-c++11-extensions -Wno-local-type-template-args -Wno-deprecated-register
+	QMAKE_CXXFLAGS_WARN_ON = -Wall
 }
 
 win* {
 	QMAKE_CXXFLAGS += /MP /Zi /wd4251 /FS
 	Debug:QMAKE_CXXFLAGS += /JMC
 	QMAKE_CXXFLAGS += /std:c++latest /permissive- /Zc:__cplusplus
-	QMAKE_LFLAGS += /DEBUG:FASTLINK
+	QMAKE_LFLAGS += /DEBUG
 
 	DEFINES += WIN32_LEAN_AND_MEAN NOMINMAX
 	QMAKE_CXXFLAGS_WARN_ON = -W4
