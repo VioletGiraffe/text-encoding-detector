@@ -59,7 +59,7 @@ run, or open `tests/text-encoding-detector-tests.pro` directly.
 | --- | --- |
 | `benchmark_corpus.{h,cpp}` | the corpus: decoding, slicing, encoding into a named codec |
 | `mixed_content_scenarios.{h,cpp}` | each language whole and mixed into three hosts at three shares in three shapes |
-| `ctextencodingdetector_tests.cpp` | correctness: the corpus contract and the shortlist resolving; `decode()` over every language, the second author, every mixed-content scenario whole and grown past the sample budget, in every codec, with the winning score capped at 0.90; the wide encodings with and without a mark; binary declined |
+| `ctextencodingdetector_tests.cpp` | correctness: the corpus contract and the shortlist resolving; `decode()` over every language, the second author, every mixed-content scenario whole and grown past the sample budget, in every codec, with the winning score capped at 0.90; the wide encodings with and without a mark; binary declined; `wideEncodingFromNulLayout()` naming each layout without the text check |
 | `ctextencodingdetector_benchmarks.cpp` | what `decode()` costs and where the cost goes |
 | `trigram_container_benchmarks.cpp` | the trigram table's container and key shape |
 | `detection_window_study.cpp` | how little of a file detection can read and still be right |

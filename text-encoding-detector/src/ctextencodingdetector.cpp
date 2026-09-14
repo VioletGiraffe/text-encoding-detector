@@ -53,7 +53,6 @@ struct NulPhases
 	qsizetype count[4] = {};
 	qsizetype positions = 0; // Bytes in each phase, the denominator of a phase's share
 
-	[[nodiscard]] bool any() const noexcept { return count[0] + count[1] + count[2] + count[3] > 0; }
 	[[nodiscard]] double share(int phase) const noexcept { return positions > 0 ? static_cast<double>(count[phase]) / static_cast<double>(positions) : 0.0; }
 };
 
@@ -80,31 +79,6 @@ constexpr double wideZeroPhaseMinShare = 0.10;
 constexpr double wideDataPhaseMaxShare = 0.01;
 // UTF-32's two upper bytes are zero for the whole basic plane
 constexpr double utf32ZeroPhaseMinShare = 0.90;
-
-// The BOM-less wide encoding the NUL layout fits, or nullptr for a binary one. UTF-32 is tried first: its layout
-// passes the UTF-16 test of the same endianness.
-[[nodiscard]] const char* wideEncodingFor(const NulPhases& nuls, qsizetype size) noexcept
-{
-	if (size % 4 == 0)
-	{
-		if (nuls.share(2) >= utf32ZeroPhaseMinShare && nuls.share(3) >= utf32ZeroPhaseMinShare && nuls.share(0) <= wideDataPhaseMaxShare)
-			return "UTF-32LE";
-		if (nuls.share(0) >= utf32ZeroPhaseMinShare && nuls.share(1) >= utf32ZeroPhaseMinShare && nuls.share(3) <= wideDataPhaseMaxShare)
-			return "UTF-32BE";
-	}
-
-	if (size % 2 == 0)
-	{
-		const double even = (nuls.share(0) + nuls.share(2)) / 2.0;
-		const double odd = (nuls.share(1) + nuls.share(3)) / 2.0;
-		if (odd >= wideZeroPhaseMinShare && even <= wideDataPhaseMaxShare)
-			return "UTF-16LE";
-		if (even >= wideZeroPhaseMinShare && odd <= wideDataPhaseMaxShare)
-			return "UTF-16BE";
-	}
-
-	return nullptr;
-}
 
 // An array of small integers has a wide encoding's NUL layout too, and decodes to Latin-1 letters, control
 // characters and replacement characters in equal measure. Text is three quarters letters, digits and whitespace
@@ -195,15 +169,42 @@ static inline bool contains(const Container& container, const Value& value)
 	return tables;
 }
 
+const char* CTextEncodingDetector::wideEncodingFromNulLayout(const QByteArray& data) noexcept
+{
+	const NulPhases nuls = countNulPhases(data);
+	const qsizetype size = data.size();
+
+	// UTF-32 is tried first: its layout passes the UTF-16 test of the same endianness
+	if (size % 4 == 0)
+	{
+		if (nuls.share(2) >= utf32ZeroPhaseMinShare && nuls.share(3) >= utf32ZeroPhaseMinShare && nuls.share(0) <= wideDataPhaseMaxShare)
+			return "UTF-32LE";
+		if (nuls.share(0) >= utf32ZeroPhaseMinShare && nuls.share(1) >= utf32ZeroPhaseMinShare && nuls.share(3) <= wideDataPhaseMaxShare)
+			return "UTF-32BE";
+	}
+
+	if (size % 2 == 0)
+	{
+		const double even = (nuls.share(0) + nuls.share(2)) / 2.0;
+		const double odd = (nuls.share(1) + nuls.share(3)) / 2.0;
+		if (odd >= wideZeroPhaseMinShare && even <= wideDataPhaseMaxShare)
+			return "UTF-16LE";
+		if (even >= wideZeroPhaseMinShare && odd <= wideDataPhaseMaxShare)
+			return "UTF-16BE";
+	}
+
+	return nullptr;
+}
+
 CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QByteArray & textData, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages)
 {
 	if (auto decodedText = decodeUtfBom(textData); !decodedText.encoding.isEmpty())
 		return decodedText;
 
 	// The only texts with a NUL byte are BOM-less UTF-16 and UTF-32; anything else that carries one is binary
-	if (const NulPhases nuls = countNulPhases(textData); nuls.any())
+	if (isBinary(textData))
 	{
-		const char* const encoding = wideEncodingFor(nuls, textData.size());
+		const char* const encoding = wideEncodingFromNulLayout(textData);
 		if (!encoding)
 			return {};
 

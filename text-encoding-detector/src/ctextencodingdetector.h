@@ -43,6 +43,10 @@ public:
 
 	[[nodiscard]] static DecodedText decodeUtfBom(const QByteArray& textData);
 
+	// The UTF-16 or UTF-32 encoding the layout of the NUL bytes fits, by Qt codec name. Neither a BOM nor the decoded text is checked.
+	// nullptr for NUL-free input and for a layout no wide encoding fits.
+	[[nodiscard]] static const char* wideEncodingFromNulLayout(const QByteArray& data) noexcept;
+
 	// Scores the whole of 'textData' under every codec of the shortlist and the locale's, against every table.
 	// The results are sorted by score from best to worst. Wide encodings and UTF-8 are decode()'s business, not this.
 	[[nodiscard]] static std::vector<EncodingDetectionResult>

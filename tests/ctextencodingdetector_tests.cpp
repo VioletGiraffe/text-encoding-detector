@@ -70,6 +70,15 @@ void checkRecovered(const std::string& label, const QString& expected, const cha
 	return BenchmarkCorpus::slice(text, sampleCharacters);
 }
 
+// Little-endian 16-bit integers under 256: exactly UTF-16LE's NUL layout, decoding to Latin-1 and controls
+[[nodiscard]] QByteArray littleEndianUint16Ramp()
+{
+	QByteArray ramp;
+	for (int i = 0; i < 32768; ++i)
+		ramp.append(static_cast<char>(i & 0xFF)).append('\0');
+	return ramp;
+}
+
 }
 
 TEST_CASE("Every corpus file is present and holds text")
@@ -234,11 +243,7 @@ TEST_CASE("decode() declines binary and NUL-carrying 8-bit text")
 	terminated.append('\0');
 	declines("Windows-1251 text with a trailing NUL", terminated);
 
-	// Little-endian 16-bit integers under 256 have exactly UTF-16LE's NUL layout and decode to Latin-1 and controls
-	QByteArray ramp;
-	for (int i = 0; i < 32768; ++i)
-		ramp.append(static_cast<char>(i & 0xFF)).append('\0');
-	declines("a ramp of little-endian uint16 values", ramp);
+	declines("a ramp of little-endian uint16 values", littleEndianUint16Ramp());
 
 	// Quiet 16-bit audio: small values of either sign, high bytes 0x00 or 0xFF
 	QByteArray audio;
@@ -250,4 +255,20 @@ TEST_CASE("decode() declines binary and NUL-carrying 8-bit text")
 		audio.append(static_cast<char>(value & 0xFF)).append(static_cast<char>((value >> 8) & 0xFF));
 	}
 	declines("quiet little-endian 16-bit audio", audio);
+}
+
+TEST_CASE("wideEncodingFromNulLayout() names the wide encoding by the NUL layout alone, text or not")
+{
+	const auto layoutEncoding = [](const QByteArray& data) {
+		const char* const encoding = CTextEncodingDetector::wideEncodingFromNulLayout(data);
+		return std::string{ encoding ? encoding : "" };
+	};
+
+	const QString text = sample(BenchmarkCorpus::text(BenchmarkCorpus::Host::Code));
+	for (const char* codecName : { "UTF-16LE", "UTF-16BE", "UTF-32LE", "UTF-32BE" })
+		CHECK(layoutEncoding(BenchmarkCorpus::encoded(text, codecName)) == codecName);
+
+	CHECK(layoutEncoding(littleEndianUint16Ramp()) == "UTF-16LE");
+	CHECK(layoutEncoding(BenchmarkCorpus::encoded(text, "UTF-8")).empty());
+	CHECK(layoutEncoding(BenchmarkCorpus::executableBytes(sampleCharacters)).empty());
 }
