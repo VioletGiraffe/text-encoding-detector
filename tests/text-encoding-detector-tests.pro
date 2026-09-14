@@ -4,7 +4,25 @@ TARGET = text-encoding-detector-tests
 CONFIG += console testcase strict_c++ c++2b
 CONFIG -= c++17 c++2a
 
-CONFIG(release, debug|release):CONFIG += optimize_full ltcg
+CONFIG(release, debug|release) {
+	CONFIG += optimize_full
+
+	# global.pri's LTO flags: CONFIG += ltcg would contradict them with -fno-fat-lto-objects when global.pri is included
+	win* {
+		QMAKE_CXXFLAGS += /GL
+		QMAKE_LFLAGS += /LTCG:INCREMENTAL
+	}
+	linux* {
+		QMAKE_CXXFLAGS += -flto=auto -ffat-lto-objects
+		QMAKE_CFLAGS   += -flto=auto -ffat-lto-objects
+		QMAKE_LFLAGS   += -flto=auto
+	}
+	mac* {
+		QMAKE_CXXFLAGS += -flto=thin
+		QMAKE_CFLAGS   += -flto=thin
+		QMAKE_LFLAGS   += -flto=thin
+	}
+}
 
 QT = core
 greaterThan(QT_MAJOR_VERSION, 5) {
