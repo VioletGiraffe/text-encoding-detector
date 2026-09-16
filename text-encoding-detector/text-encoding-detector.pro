@@ -2,10 +2,7 @@ TARGET = text_encoding_detector
 TEMPLATE = lib
 CONFIG += staticlib
 
-QT = core
-greaterThan(QT_MAJOR_VERSION, 5) {
-	QT += core5compat
-}
+QT = core core5compat
 
 CONFIG += strict_c++ c++2b
 

@@ -24,10 +24,7 @@ CONFIG(release, debug|release) {
 	}
 }
 
-QT = core
-greaterThan(QT_MAJOR_VERSION, 5) {
-	QT += core5compat
-}
+QT = core core5compat
 
 DEFINES += CATCH_CONFIG_ENABLE_BENCHMARKING
 
