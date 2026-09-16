@@ -41,6 +41,9 @@ public:
 	[[nodiscard]] static DecodedText
 	decode(const QByteArray& textData, const std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>& tablesForLanguages = std::vector<std::unique_ptr<CTrigramFrequencyTable_Base>>());
 
+	// decode(), read as the system locale's 8-bit codec where it finds nothing plausible: every input yields some text.
+	[[nodiscard]] static DecodedText decodeWithLocaleFallback(const QByteArray& textData);
+
 	[[nodiscard]] static DecodedText decodeUtfBom(const QByteArray& textData);
 
 	// The UTF-16 or UTF-32 encoding the layout of the NUL bytes fits, by Qt codec name. Neither a BOM nor the decoded text is checked.

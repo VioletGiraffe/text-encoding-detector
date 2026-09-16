@@ -236,6 +236,18 @@ CTextEncodingDetector::DecodedText CTextEncodingDetector::decode(const QByteArra
 	return DecodedText();
 }
 
+CTextEncodingDetector::DecodedText CTextEncodingDetector::decodeWithLocaleFallback(const QByteArray& textData)
+{
+	DecodedText result = decode(textData);
+	if (!result.encoding.isEmpty() || !result.text.isEmpty())
+		return result;
+
+	QTextCodec* const codec = QTextCodec::codecForLocale();
+	assert_and_return_r(codec, result);
+
+	return DecodedText{ codec->toUnicode(textData), codec->name(), {}, 1.0 };
+}
+
 QByteArray CTextEncodingDetector::anchoredSample(const QByteArray& data, qsizetype budgetBytes, qsizetype chunkBytes)
 {
 	if (data.size() <= budgetBytes)
