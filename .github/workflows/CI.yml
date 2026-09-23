@@ -34,6 +34,8 @@ jobs:
       run: |
         git clone --depth 1 https://github.com/VioletGiraffe/cpp-template-utils ../cpp-template-utils
         git clone --depth 1 https://github.com/VioletGiraffe/cpputils ../cpputils
+        # Only for the tests' header-only Catch2 printers, qtcore_helpers/catch_qt.hpp
+        git clone --depth 1 https://github.com/VioletGiraffe/qtutils ../qtutils
 
     # text-analyzer is built and not run: it is the tool that generates the trigram tables, and nothing else compiles it
     # cmd's exit status is the last command's, so every command fails the step itself

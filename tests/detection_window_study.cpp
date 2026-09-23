@@ -1,7 +1,7 @@
 #include "compiler/compiler_warnings_control.h"
 
 DISABLE_COMPILER_WARNINGS
-#include "3rdparty/catch2/catch.hpp"
+#include "qtcore_helpers/catch_qt.hpp" // qtutils
 RESTORE_COMPILER_WARNINGS
 
 #include "benchmark_corpus.h"

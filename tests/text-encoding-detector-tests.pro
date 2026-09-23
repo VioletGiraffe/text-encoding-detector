@@ -65,7 +65,8 @@ INCLUDEPATH += \
 	$$PWD/../text-encoding-detector/src \
 	$$PWD/../../cpputils \
 	$$PWD/../../cpp-template-utils \
-	$$PWD/../../cpp-template-utils/3rdparty
+	$$PWD/../../cpp-template-utils/3rdparty \
+	$$PWD/../../qtutils # Header-only use: catch_qt.hpp
 
 # The committed corpus the tests, benchmarks and study all read; see ../corpus/README.md
 DEFINES += CORPUS_DIR=\\\"$$PWD/../corpus\\\"
