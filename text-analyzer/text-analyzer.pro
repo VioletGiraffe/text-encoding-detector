@@ -13,6 +13,7 @@ RCC_DIR     = build
 linux*|mac*|freebsd{
 	QMAKE_CXXFLAGS_WARN_ON += -pedantic-errors
 	QMAKE_CFLAGS_WARN_ON += -pedantic-errors
+	*-g++*:QMAKE_CXXFLAGS_WARN_ON += -Wno-maybe-uninitialized # False positives on std::optional and std::expected
 }
 
 win* {

@@ -58,6 +58,7 @@ win* {
 
 linux* | mac* | freebsd {
 	QMAKE_CXXFLAGS_WARN_ON *= -Wall
+	*-g++*:QMAKE_CXXFLAGS_WARN_ON += -Wno-maybe-uninitialized # False positives on std::optional and std::expected
 }
 
 INCLUDEPATH += \
