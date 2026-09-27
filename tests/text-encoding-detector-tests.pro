@@ -26,8 +26,6 @@ CONFIG(release, debug|release) {
 
 QT = core core5compat
 
-DEFINES += CATCH_CONFIG_ENABLE_BENCHMARKING
-
 # The parent's global.pri where this repo is a submodule; a standalone build (CI) restates the flags from it that matter here
 exists(../../global.pri) {
 	include(../../global.pri)
