@@ -1,6 +1,7 @@
 #pragma once
 
 #include "compiler/compiler_warnings_control.h"
+#include "hash/hash_functors.hpp"
 
 DISABLE_COMPILER_WARNINGS
 #include <QString>
@@ -62,14 +63,8 @@ public:
 		struct HashTrigram {
 			using is_avalanching = std::true_type;
 
-			// splitmix64's finalizer, which avalanches a key this small in a handful of instructions
-			[[nodiscard]] inline constexpr uint64_t operator()(const Trigram& trigram) const noexcept {
-				uint64_t key = trigram.packed;
-				key ^= key >> 30;
-				key *= 0xbf58476d1ce4e5b9ULL;
-				key ^= key >> 27;
-				key *= 0x94d049bb133111ebULL;
-				return key ^ (key >> 31);
+			[[nodiscard]] inline uint64_t operator()(const Trigram& trigram) const noexcept {
+				return moremur_hash{}(trigram.packed);
 			}
 		};
 

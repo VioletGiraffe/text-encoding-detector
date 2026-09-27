@@ -9,6 +9,8 @@ RESTORE_COMPILER_WARNINGS
 #include "ctextparser.h"
 #include "trigramfrequencytables/ctrigramfrequencytable_russian.h"
 
+#include "hash/hash_functors.hpp"
+
 #include <hash/wheathash.hpp>
 
 DISABLE_COMPILER_WARNINGS
@@ -56,21 +58,6 @@ struct HashCharsTrigram
 	}
 };
 
-// What CTextParser::OccurrenceTable::HashTrigram does, over the same key
-struct HashPackedTrigram
-{
-	using is_avalanching = std::true_type;
-
-	[[nodiscard]] uint64_t operator()(uint64_t key) const noexcept
-	{
-		key ^= key >> 30;
-		key *= 0xbf58476d1ce4e5b9ULL;
-		key ^= key >> 27;
-		key *= 0x94d049bb133111ebULL;
-		return key ^ (key >> 31);
-	}
-};
-
 [[nodiscard]] constexpr uint64_t packed(const CharsTrigram& trigram) noexcept
 {
 	return uint64_t{ trigram.chars[0].unicode() }
@@ -83,7 +70,8 @@ struct HashPackedTrigram
 	return CharsTrigram{ { QChar{ static_cast<char16_t>(key) }, QChar{ static_cast<char16_t>(key >> 16) }, QChar{ static_cast<char16_t>(key >> 32) } } };
 }
 
-template <typename Key> using HashFor = std::conditional_t<std::is_same_v<Key, uint64_t>, HashPackedTrigram, HashCharsTrigram>;
+// The packed key is hashed as CTextParser::OccurrenceTable::HashTrigram hashes it
+template <typename Key> using HashFor = std::conditional_t<std::is_same_v<Key, uint64_t>, moremur_hash, HashCharsTrigram>;
 
 template <typename Key> using BoostMap = boost::unordered_flat_map<Key, Stats, HashFor<Key>>;
 template <typename Key> using AnkerlMap = ankerl::unordered_dense::map<Key, Stats, HashFor<Key>>;

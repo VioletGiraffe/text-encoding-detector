@@ -144,8 +144,8 @@ built from `QChar` on first use, so no Unicode data is written out here. Its wid
 supplements and extensions, Greek and Cyrillic — every script the frequency tables have a language for. A table of
 only the 128 ASCII code points instead costs Cyrillic prose 6%: its branch flips at every word boundary.
 
-The map's key is the three code points packed into the low 48 bits of a `uint64`, hashed by splitmix64's
-finalizer. It is worth more than the scan table: `parse()` runs 2.1 to 2.5 times faster than with a key of three
+The map's key is the three code points packed into the low 48 bits of a `uint64`, hashed by `moremur_hash`
+(cpp-template-utils). It is worth more than the scan table: `parse()` runs 2.1 to 2.5 times faster than with a key of three
 `QChar` hashed as six bytes, on every script measured.
 
 `detect()` reuses one `CTextParser` across the codecs and reserves a thousand trigrams in it up front, `clear()`
